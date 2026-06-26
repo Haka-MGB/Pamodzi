@@ -1,38 +1,41 @@
 'use client'
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
-import type { Payment, MaintenanceIssue, Tenant, Property, Toast, Notification } from '@/types'
-import {
-  MOCK_USER, MOCK_PROPERTIES, MOCK_TENANTS, MOCK_PAYMENTS,
-  MOCK_ISSUES, MOCK_NOTIFICATIONS, MOCK_ACTIVITY, MOCK_REVENUE,
-} from '@/lib/data'
+import type { ActivityItem, Payment, MaintenanceIssue, Tenant, Property, Toast, Notification, RevenueDataPoint, User } from '@/types'
+// Start with empty defaults; do not rely on demo/mock data at startup.
+import { apiGet, apiPatch, apiPost, apiDelete, type AppData } from '@/lib/client-api'
 
 interface AppContextValue {
   // Auth
   isLoggedIn: boolean
+  isLoading: boolean
   login: (email: string, password: string) => Promise<boolean>
   registerAccount: (account: RegisterAccountInput) => Promise<{ ok: boolean; message: string }>
   logout: () => void
 
   // Data
-  user: typeof MOCK_USER
+  user: User
   properties: Property[]
   tenants: Tenant[]
   payments: Payment[]
   issues: MaintenanceIssue[]
   notifications: Notification[]
-  activity: typeof MOCK_ACTIVITY
-  revenueData: typeof MOCK_REVENUE
+  activity: ActivityItem[]
+  revenueData: RevenueDataPoint[]
 
   // Mutations
-  confirmPayment: (id: string) => void
-  addProperty: (p: Omit<Property, 'id'>) => void
-  addPayment: (p: Omit<Payment, 'id'>) => void
-  addTenant: (t: Omit<Tenant, 'id'>) => void
-  updateTenant: (id: string, updates: Partial<Tenant>) => void
-  addIssue: (i: Omit<MaintenanceIssue, 'id'>) => void
-  updateIssue: (id: string, updates: Partial<MaintenanceIssue>) => void
-  markNotificationRead: (id: string) => void
-  markAllNotificationsRead: () => void
+  confirmPayment: (id: string) => Promise<void>
+  addProperty: (p: Omit<Property, 'id'>) => Promise<void>
+  addPayment: (p: Omit<Payment, 'id'>) => Promise<void>
+  addTenant: (t: Omit<Tenant, 'id'>) => Promise<void>
+  updateTenant: (id: string, updates: Partial<Tenant>) => Promise<void>
+  updateProperty: (id: string, updates: Partial<Property>) => Promise<void>
+  deleteProperty: (id: string, password?: string) => Promise<void>
+  addIssue: (i: Omit<MaintenanceIssue, 'id'>) => Promise<void>
+  updateIssue: (id: string, updates: Partial<MaintenanceIssue>) => Promise<void>
+  deleteTenant: (id: string, password?: string) => Promise<void>
+  deletePayment: (id: string, password?: string) => Promise<void>
+  markNotificationRead: (id: string) => Promise<void>
+  markAllNotificationsRead: () => Promise<void>
 
   // UI
   sidebarCollapsed: boolean
@@ -48,7 +51,7 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null)
 
-interface RegisteredAccount {
+interface RegisterAccountInput {
   name: string
   company: string
   phone: string
@@ -56,104 +59,156 @@ interface RegisteredAccount {
   password: string
 }
 
-interface RegisterAccountInput extends RegisteredAccount {}
-
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoggedIn,        setIsLoggedIn]        = useState(false)
-  const [properties,        setProperties]        = useState(MOCK_PROPERTIES)
-  const [tenants,           setTenants]           = useState(MOCK_TENANTS)
-  const [payments,          setPayments]          = useState(MOCK_PAYMENTS)
-  const [issues,            setIssues]            = useState(MOCK_ISSUES)
-  const [notifications,     setNotifications]     = useState(MOCK_NOTIFICATIONS)
+  const [isLoading,         setIsLoading]         = useState(true)
+  const [user,              setUser]              = useState<User>({ id: '', name: '', email: '', role: '', location: '', phone: '', company: '', initials: '' })
+  const [properties,        setProperties]        = useState<Property[]>([])
+  const [tenants,           setTenants]           = useState<Tenant[]>([])
+  const [payments,          setPayments]          = useState<Payment[]>([])
+  const [issues,            setIssues]            = useState<MaintenanceIssue[]>([])
+  const [notifications,     setNotifications]     = useState<Notification[]>([])
+  const [activity,          setActivity]          = useState<ActivityItem[]>([])
+  const [revenueData,       setRevenueData]       = useState<RevenueDataPoint[]>([])
   const [sidebarCollapsed,  setSidebarCollapsed]  = useState(false)
   const [darkMode,          setDarkMode]          = useState(false)
   const [toasts,            setToasts]            = useState<Toast[]>([])
-  const [registeredAccounts, setRegisteredAccounts] = useState<RegisteredAccount[]>([])
 
   // Apply dark mode class
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode)
   }, [darkMode])
 
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('pamodziRegisteredAccounts')
-      if (saved) setRegisteredAccounts(JSON.parse(saved))
-    } catch {
-      setRegisteredAccounts([])
-    }
+  const applyData = useCallback((data: AppData) => {
+    setUser(data.user)
+    setProperties(data.properties)
+    setTenants(data.tenants)
+    setPayments(data.payments)
+    setIssues(data.issues)
+    setNotifications(data.notifications)
+    setActivity(data.activity)
+    setRevenueData(data.revenueData)
   }, [])
+
+  const refreshData = useCallback(async () => {
+    const data = await apiGet<AppData>('/api/app-data')
+    applyData(data)
+    return data
+  }, [applyData])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function restoreSession() {
+      try {
+        const { user: sessionUser } = await apiGet<{ user: User | null }>('/api/auth/session')
+        if (!mounted) return
+
+        if (sessionUser) {
+          await refreshData()
+          if (mounted) setIsLoggedIn(true)
+        }
+      } catch {
+        if (mounted) setIsLoggedIn(false)
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
+
+    restoreSession()
+    return () => { mounted = false }
+  }, [refreshData])
 
   const login = useCallback(async (email: string, password: string) => {
-    await new Promise(r => setTimeout(r, 1300))
-    const normalizedEmail = email.trim().toLowerCase()
-    const hasDemoAccess = normalizedEmail === 'james.mwale@pamodzi.com' && password === 'password123'
-    const hasRegisteredAccess = registeredAccounts.some(account =>
-      account.email.toLowerCase() === normalizedEmail && account.password === password
-    )
-
-    if (hasDemoAccess || hasRegisteredAccess) {
+    try {
+      await apiPost<{ user: User }>('/api/auth/login', { email, password })
+      await refreshData()
       setIsLoggedIn(true)
       return true
+    } catch {
+      return false
     }
-    return false
-  }, [registeredAccounts])
+  }, [refreshData])
 
   const registerAccount = useCallback(async (account: RegisterAccountInput) => {
-    await new Promise(r => setTimeout(r, 900))
-
-    const normalizedEmail = account.email.trim().toLowerCase()
-    const isDemoEmail = normalizedEmail === 'james.mwale@pamodzi.com'
-    const isDuplicate = registeredAccounts.some(saved => saved.email.toLowerCase() === normalizedEmail)
-
-    if (isDemoEmail || isDuplicate) {
-      return { ok: false, message: 'An account already exists for this email address.' }
+    try {
+      await apiPost<{ user: User }>('/api/auth/register', account)
+      await refreshData()
+      setIsLoggedIn(true)
+      return { ok: true, message: 'Account created successfully.' }
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : 'Unable to create account.' }
     }
+  }, [refreshData])
 
-    const nextAccounts = [...registeredAccounts, { ...account, email: account.email.trim() }]
-    setRegisteredAccounts(nextAccounts)
-    localStorage.setItem('pamodziRegisteredAccounts', JSON.stringify(nextAccounts))
-    setIsLoggedIn(true)
-
-    return { ok: true, message: 'Account created successfully.' }
-  }, [registeredAccounts])
-
-  const logout = useCallback(() => setIsLoggedIn(false), [])
-
-  const confirmPayment = useCallback((id: string) => {
-    setPayments(prev => prev.map(p => p.id === id ? { ...p, status: 'paid', date: 'Today' } : p))
+  const logout = useCallback(() => {
+    apiPost('/api/auth/logout').catch(() => undefined)
+    setIsLoggedIn(false)
   }, [])
 
-  const addProperty = useCallback((p: Omit<Property, 'id'>) => {
-    setProperties(prev => [{ ...p, id: `p${Date.now()}` }, ...prev])
+  const confirmPayment = useCallback(async (id: string) => {
+    const payment = await apiPatch<Payment>(`/api/payments/${id}/confirm`)
+    setPayments(prev => prev.map(p => p.id === id ? payment : p))
   }, [])
 
-  const addPayment = useCallback((p: Omit<Payment, 'id'>) => {
-    setPayments(prev => [{ ...p, id: `pay${Date.now()}` }, ...prev])
+  const addProperty = useCallback(async (p: Omit<Property, 'id'>) => {
+    const property = await apiPost<Property>('/api/properties', p)
+    setProperties(prev => [property, ...prev])
   }, [])
 
-  const addTenant = useCallback((t: Omit<Tenant, 'id'>) => {
-    setTenants(prev => [{ ...t, id: `t${Date.now()}` }, ...prev])
+  const addPayment = useCallback(async (p: Omit<Payment, 'id'>) => {
+    const payment = await apiPost<Payment>('/api/payments', p)
+    setPayments(prev => [payment, ...prev])
   }, [])
 
-  const updateTenant = useCallback((id: string, updates: Partial<Tenant>) => {
-    setTenants(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
+  const addTenant = useCallback(async (t: Omit<Tenant, 'id'>) => {
+    const tenant = await apiPost<Tenant>('/api/tenants', t)
+    setTenants(prev => [tenant, ...prev])
   }, [])
 
-  const addIssue = useCallback((i: Omit<MaintenanceIssue, 'id'>) => {
-    setIssues(prev => [{ ...i, id: `i${Date.now()}` }, ...prev])
+  const updateTenant = useCallback(async (id: string, updates: Partial<Tenant>) => {
+    const tenant = await apiPatch<Tenant>(`/api/tenants/${id}`, updates)
+    setTenants(prev => prev.map(t => t.id === id ? tenant : t))
   }, [])
 
-  const updateIssue = useCallback((id: string, updates: Partial<MaintenanceIssue>) => {
-    setIssues(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i))
+  const updateProperty = useCallback(async (id: string, updates: Partial<Property>) => {
+    const property = await apiPatch<Property>(`/api/properties/${id}`, updates)
+    setProperties(prev => prev.map(p => p.id === id ? property : p))
   }, [])
 
-  const markNotificationRead = useCallback((id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
+  const deleteProperty = useCallback(async (id: string, password?: string) => {
+    await apiDelete(`/api/properties/${id}`, password ? { password } : undefined)
+    setProperties(prev => prev.filter(p => p.id !== id))
   }, [])
 
-  const markAllNotificationsRead = useCallback(() => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  const deleteTenant = useCallback(async (id: string, password?: string) => {
+    await apiDelete(`/api/tenants/${id}`, password ? { password } : undefined)
+    setTenants(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  const deletePayment = useCallback(async (id: string, password?: string) => {
+    await apiDelete(`/api/payments/${id}`, password ? { password } : undefined)
+    setPayments(prev => prev.filter(p => p.id !== id))
+  }, [])
+
+  const addIssue = useCallback(async (i: Omit<MaintenanceIssue, 'id'>) => {
+    const issue = await apiPost<MaintenanceIssue>('/api/issues', i)
+    setIssues(prev => [issue, ...prev])
+  }, [])
+
+  const updateIssue = useCallback(async (id: string, updates: Partial<MaintenanceIssue>) => {
+    const issue = await apiPatch<MaintenanceIssue>(`/api/issues/${id}`, updates)
+    setIssues(prev => prev.map(i => i.id === id ? issue : i))
+  }, [])
+
+  const markNotificationRead = useCallback(async (id: string) => {
+    const notification = await apiPatch<Notification>(`/api/notifications/${id}`)
+    setNotifications(prev => prev.map(n => n.id === id ? notification : n))
+  }, [])
+
+  const markAllNotificationsRead = useCallback(async () => {
+    const nextNotifications = await apiPost<Notification[]>('/api/notifications/read-all')
+    setNotifications(nextNotifications)
   }, [])
 
   const toggleSidebar = useCallback(() => setSidebarCollapsed(p => !p), [])
@@ -169,10 +224,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppContext.Provider value={{
-      isLoggedIn, login, registerAccount, logout,
-      user: MOCK_USER, properties, tenants, payments, issues,
-      notifications, activity: MOCK_ACTIVITY, revenueData: MOCK_REVENUE,
-      confirmPayment, addProperty, addPayment, addTenant, updateTenant, addIssue, updateIssue,
+      isLoggedIn, isLoading, login, registerAccount, logout,
+      user, properties, tenants, payments, issues,
+      notifications, activity, revenueData,
+      confirmPayment, addProperty, addPayment, addTenant, updateTenant, updateProperty, deleteProperty, deleteTenant, deletePayment, addIssue, updateIssue,
       markNotificationRead, markAllNotificationsRead,
       sidebarCollapsed, toggleSidebar, darkMode, toggleDark,
       toasts, showToast, unreadCount,

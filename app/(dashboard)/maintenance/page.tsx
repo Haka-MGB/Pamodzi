@@ -34,26 +34,36 @@ export default function MaintenancePage() {
 
   const updatingIssue = issues.find(i => i.id === updateId)
 
-  function handleStatusUpdate() {
+  async function handleStatusUpdate() {
     if (!updateId) return
-    updateIssue(updateId, { status: newStatus })
-    showToast('success', 'Issue status updated.')
-    setUpdateId(null)
+    if (!window.confirm(`Save this work order status as ${newStatus}?`)) return
+    try {
+      await updateIssue(updateId, { status: newStatus })
+      showToast('success', 'Issue status updated.')
+      setUpdateId(null)
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Unable to update issue.')
+    }
   }
 
-  function handleAddIssue() {
+  async function handleAddIssue() {
     const tenant = tenants.find(t => t.id === form.tenantId)
     if (!form.title || !tenant) { showToast('error', 'Title and tenant are required'); return }
-    addIssue({
-      title: form.title, description: form.description,
-      tenant: tenant.name, tenantId: tenant.id,
-      unit: `${tenant.unit} · ${tenant.propertyName}`,
-      category: form.category, priority: form.priority as any,
-      status: form.status, date: 'Just now', icon: 'wrench',
-    })
-    showToast('success', 'Issue logged successfully.')
-    setAddOpen(false)
-    setForm({ title:'', description:'', tenantId:'', category:'Plumbing', priority:'medium', status:'open' })
+    if (!window.confirm(`Save this maintenance issue for ${tenant.name}?`)) return
+    try {
+      await addIssue({
+        title: form.title, description: form.description,
+        tenant: tenant.name, tenantId: tenant.id,
+        unit: `${tenant.unit} · ${tenant.propertyName}`,
+        category: form.category, priority: form.priority as any,
+        status: form.status, date: 'Just now', icon: 'wrench',
+      })
+      showToast('success', 'Issue logged successfully.')
+      setAddOpen(false)
+      setForm({ title:'', description:'', tenantId:'', category:'Plumbing', priority:'medium', status:'open' })
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Unable to log issue.')
+    }
   }
 
   const PRIORITY_ORDER: Record<string,number> = { urgent:0, high:1, medium:2, low:3 }

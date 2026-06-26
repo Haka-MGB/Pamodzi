@@ -8,10 +8,12 @@ import Modal from '@/components/ui/Modal'
 import { Building2, DoorOpen, Eye, MapPin, Plus, Settings2, Wallet } from 'lucide-react'
 
 export default function PropertiesPage() {
-  const { properties, addProperty, showToast } = useApp()
+  const { properties, addProperty, updateProperty, deleteProperty, showToast } = useApp()
   const [addOpen, setAddOpen] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [manageId, setManageId] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
   const [form, setForm] = useState({
     name: '',
     location: '',
@@ -26,8 +28,13 @@ export default function PropertiesPage() {
   const occupiedUnits = properties.reduce((s, p) => s + p.occupiedUnits, 0)
   const detailProperty = properties.find(p => p.id === detailId)
   const manageProperty = properties.find(p => p.id === manageId)
+  const editProperty = properties.find(p => p.id === editId)
+  const [editForm, setEditForm] = useState({ name: '', location: '', type: 'Residential', totalUnits: '8', occupiedUnits: '0', monthlyRevenue: '0' })
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletePassword, setDeletePassword] = useState('')
 
-  function handleAddProperty() {
+  async function handleAddProperty() {
     const parsedTotal = Number(form.totalUnits)
     const parsedOccupied = Number(form.occupiedUnits)
     const parsedRevenue = Number(form.monthlyRevenue)
@@ -42,17 +49,23 @@ export default function PropertiesPage() {
       return
     }
 
-    addProperty({
-      name: form.name.trim(),
-      location: form.location.trim(),
-      type: form.type,
-      totalUnits: parsedTotal,
-      occupiedUnits: parsedOccupied,
-      monthlyRevenue: parsedRevenue,
-    })
-    showToast('success', `${form.name} added.`)
-    setAddOpen(false)
-    setForm({ name: '', location: '', type: 'Residential', totalUnits: '8', occupiedUnits: '0', monthlyRevenue: '0' })
+    if (!window.confirm(`Save ${form.name} as a new property?`)) return
+
+    try {
+      await addProperty({
+        name: form.name.trim(),
+        location: form.location.trim(),
+        type: form.type,
+        totalUnits: parsedTotal,
+        occupiedUnits: parsedOccupied,
+        monthlyRevenue: parsedRevenue,
+      })
+      showToast('success', `${form.name} added.`)
+      setAddOpen(false)
+      setForm({ name: '', location: '', type: 'Residential', totalUnits: '8', occupiedUnits: '0', monthlyRevenue: '0' })
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Unable to save property.')
+    }
   }
 
   return (
@@ -112,14 +125,43 @@ export default function PropertiesPage() {
                 </div>
 
                 <div className="flex gap-2 mt-4">
-                  <button className="btn btn-sm flex-1" onClick={() => setDetailId(p.id)}><Eye size={12}/> Details</button>
+                  <button className="btn btn-sm" onClick={() => setDetailId(p.id)}><Eye size={12}/> Details</button>
+                  <button className="btn btn-sm" onClick={() => { setEditId(p.id); setEditForm({ name: p.name, location: p.location, type: p.type, totalUnits: String(p.totalUnits), occupiedUnits: String(p.occupiedUnits), monthlyRevenue: String(p.monthlyRevenue) }); setEditOpen(true) }}><Settings2 size={12}/> Edit</button>
                   <button className="btn-primary btn btn-sm flex-1" onClick={() => setManageId(p.id)}><Settings2 size={12}/> Manage</button>
+                  <button className="btn btn-sm" onClick={() => { setDeletingId(p.id); setDeletePassword(''); setDeleteConfirmOpen(true) }}>Delete</button>
                 </div>
               </div>
             </div>
           )
         })}
       </div>
+
+      <Modal open={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setDeletingId(null); setDeletePassword('') }} title="Confirm delete" size="sm"
+        footer={<>
+          <button className="btn" onClick={() => { setDeleteConfirmOpen(false); setDeletingId(null); setDeletePassword('') }}>Cancel</button>
+          <button className="btn-primary btn" onClick={async () => {
+            if (!deletingId) return
+            if (!deletePassword) { showToast('error', 'Enter your password to confirm.'); return }
+            const name = properties.find(p => p.id === deletingId)?.name ?? 'this property'
+            if (!window.confirm(`Delete ${name} permanently?`)) return
+            try {
+              await deleteProperty(deletingId, deletePassword)
+              showToast('success', `${name} deleted.`)
+              setDeleteConfirmOpen(false)
+              setDeletingId(null)
+              setDeletePassword('')
+            } catch (err) { showToast('error', err instanceof Error ? err.message : 'Unable to delete.') }
+          }}>Delete</button>
+        </>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm">This action permanently deletes the property. Enter your account password to confirm.</p>
+          <div className="field">
+            <label className="field-label">Password *</label>
+            <input className="field-input" type="password" value={deletePassword} onChange={e => setDeletePassword(e.target.value)} />
+          </div>
+        </div>
+      </Modal>
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Property"
         footer={<><button className="btn" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={handleAddProperty}>Save property</button></>}>
@@ -189,6 +231,55 @@ export default function PropertiesPage() {
                 </div>
               )
             })}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!editOpen} onClose={() => { setEditOpen(false); setEditId(null) }} title="Edit Property"
+        footer={<><button className="btn" onClick={() => { setEditOpen(false); setEditId(null) }}>Cancel</button><button className="btn-primary btn" onClick={async () => {
+          if (!editProperty) return
+          if (!window.confirm(`Save changes for ${editForm.name}?`)) return
+          try {
+            await updateProperty(editProperty.id, {
+              name: editForm.name.trim(), location: editForm.location.trim(), type: editForm.type,
+              totalUnits: Number(editForm.totalUnits), occupiedUnits: Number(editForm.occupiedUnits), monthlyRevenue: Number(editForm.monthlyRevenue),
+            })
+            showToast('success', `${editForm.name} updated.`)
+            setEditOpen(false)
+            setEditId(null)
+          } catch (error) { showToast('error', error instanceof Error ? error.message : 'Unable to update property.') }
+        }}>Save changes</button></>}
+      >
+        {editProperty && (
+          <div className="space-y-4">
+            <div className="field">
+              <label className="field-label">Property name *</label>
+              <input className="field-input" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label className="field-label">Location *</label>
+              <input className="field-input" value={editForm.location} onChange={e => setEditForm(f => ({ ...f, location: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label className="field-label">Property type</label>
+              <select className="field-select" value={editForm.type} onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}>
+                {['Residential', 'Commercial Mix', 'Retail', 'Office', 'Industrial'].map(type => <option key={type}>{type}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="field">
+                <label className="field-label">Units</label>
+                <input type="number" min={1} className="field-input" value={editForm.totalUnits} onChange={e => setEditForm(f => ({ ...f, totalUnits: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label className="field-label">Occupied</label>
+                <input type="number" min={0} className="field-input" value={editForm.occupiedUnits} onChange={e => setEditForm(f => ({ ...f, occupiedUnits: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label className="field-label">Revenue</label>
+                <input type="number" min={0} className="field-input" value={editForm.monthlyRevenue} onChange={e => setEditForm(f => ({ ...f, monthlyRevenue: e.target.value }))} />
+              </div>
+            </div>
           </div>
         )}
       </Modal>

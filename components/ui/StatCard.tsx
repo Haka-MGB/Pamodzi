@@ -14,8 +14,8 @@ interface StatCardProps {
 export default function StatCard({ icon, value, label, trend, trendUp = true, onClick, accentColor }: StatCardProps) {
   return (
     <div className="stat-card" onClick={onClick}>
-      <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
-           style={{ background: accentColor ? `${accentColor}18` : 'var(--accent-primary-gl)', color: accentColor ?? 'var(--accent-primary)' }}>
+      <div className="stat-card-icon"
+           style={{ '--icon-color': accentColor ?? 'var(--accent-primary)' } as React.CSSProperties}>
         {icon}
       </div>
       <div className="text-[1.75rem] font-extrabold leading-none tracking-tight" style={{ color: 'var(--text-primary)' }}>

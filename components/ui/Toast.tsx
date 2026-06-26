@@ -24,8 +24,8 @@ export function ToastContainer() {
         const Icon = ICONS[t.type]
         return (
           <div key={t.id}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium min-w-[240px] max-w-sm pointer-events-auto animate-toast-in"
-            style={{ background: 'var(--text-primary)', color: 'var(--bg-surface)', boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }}>
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium min-w-[240px] max-w-sm pointer-events-auto animate-toast-in toast"
+            style={{ background: 'var(--bg-surface)', color: 'var(--text-primary)', boxShadow: '0 12px 32px rgba(0,0,0,0.12)', border: '1px solid var(--border-light)' }}>
             <Icon size={16} className={COLORS[t.type]} />
             <span className="flex-1">{t.message}</span>
           </div>

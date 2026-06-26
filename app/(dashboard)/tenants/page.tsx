@@ -7,11 +7,16 @@ import Modal from '@/components/ui/Modal'
 import { UserPlus, Search, ChevronRight, Mail, Phone, Send } from 'lucide-react'
 
 export default function TenantsPage() {
-  const { tenants, payments, addTenant, showToast } = useApp()
+  const { tenants, payments, addTenant, updateTenant, deleteTenant, showToast } = useApp()
   const [search,   setSearch]   = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [addOpen,  setAddOpen]  = useState(false)
   const [form, setForm] = useState({ name:'', unit:'', propertyId:'p1', propertyName:'Parklands Estate', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+  const [editOpen, setEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({ name:'', unit:'', rent:'', email:'', phone:'', leaseEnd:'' })
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletePassword, setDeletePassword] = useState('')
 
   const filtered = tenants.filter(t =>
     t.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -22,17 +27,32 @@ export default function TenantsPage() {
   const tenantDetail = tenants.find(t => t.id === selected)
   const tenantPayments = payments.filter(p => p.tenantId === selected)
 
-  function handleAdd() {
+  async function handleAdd() {
     if (!form.name || !form.unit || !form.rent) { showToast('error', 'Name, unit and rent are required'); return }
-    addTenant({
-      name: form.name, initials: form.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2),
-      unit: form.unit, propertyId: form.propertyId, propertyName: form.propertyName,
-      rent: Number(form.rent), leaseStart: form.leaseStart || 'May 2026', leaseEnd: form.leaseEnd || 'Apr 2027',
-      status: 'active', email: form.email, phone: form.phone,
-    })
-    showToast('success', `${form.name} added as a tenant.`)
-    setAddOpen(false)
-    setForm({ name:'', unit:'', propertyId:'p1', propertyName:'Parklands Estate', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+    if (!window.confirm(`Save ${form.name} as a new tenant?`)) return
+    try {
+      await addTenant({
+        name: form.name, initials: form.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2),
+        unit: form.unit, propertyId: form.propertyId, propertyName: form.propertyName,
+        rent: Number(form.rent), leaseStart: form.leaseStart || 'May 2026', leaseEnd: form.leaseEnd || 'Apr 2027',
+        status: 'active', email: form.email, phone: form.phone,
+      })
+      showToast('success', `${form.name} added as a tenant.`)
+      setAddOpen(false)
+      setForm({ name:'', unit:'', propertyId:'p1', propertyName:'Parklands Estate', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Unable to save tenant.')
+    }
+  }
+
+  async function handleUpdateTenant(id: string) {
+    if (!window.confirm(`Save changes for ${editForm.name}?`)) return
+    try {
+      await updateTenant(id, { name: editForm.name.trim(), unit: editForm.unit.trim(), rent: Number(editForm.rent), email: editForm.email.trim(), phone: editForm.phone.trim(), leaseEnd: editForm.leaseEnd || 'Apr 2027' })
+      showToast('success', `${editForm.name} updated.`)
+      setEditOpen(false)
+      setSelected(null)
+    } catch (err) { showToast('error', err instanceof Error ? err.message : 'Unable to update tenant.') }
   }
 
   const PROPERTIES = [
@@ -95,9 +115,11 @@ export default function TenantsPage() {
         <Modal open={!!selected} onClose={() => setSelected(null)} title={tenantDetail.name}
           footer={<>
             <button className="btn" onClick={() => setSelected(null)}>Close</button>
+            <button className="btn" onClick={() => { setEditForm({ name: tenantDetail.name, unit: tenantDetail.unit, rent: String(tenantDetail.rent), email: tenantDetail.email || '', phone: tenantDetail.phone || '', leaseEnd: tenantDetail.leaseEnd }); setEditOpen(true) }}>Edit</button>
             <button className="btn-primary btn" onClick={() => { showToast('success', `Reminder sent to ${tenantDetail.name}.`); setSelected(null) }}>
               <Send size={13} /> Send reminder
             </button>
+            <button className="btn btn-sm" onClick={() => { setDeletingId(tenantDetail.id); setDeletePassword(''); setDeleteConfirmOpen(true) }}>Delete</button>
           </>}>
           <div className="flex items-center gap-4 mb-5 pb-5" style={{ borderBottom: '1px solid var(--border-light)' }}>
             <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-lg font-bold flex-shrink-0"
@@ -134,6 +156,19 @@ export default function TenantsPage() {
         </Modal>
       )}
 
+        {/* Edit Tenant Modal */}
+        <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit tenant"
+          footer={<><button className="btn" onClick={() => setEditOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={() => { if (selected) handleUpdateTenant(selected) }}>Save changes</button></>}>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="field col-span-2"><label className="field-label">Full name *</label><input className="field-input" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
+            <div className="field"><label className="field-label">Unit *</label><input className="field-input" value={editForm.unit} onChange={e => setEditForm(f => ({ ...f, unit: e.target.value }))} /></div>
+            <div className="field"><label className="field-label">Monthly rent (ZMW) *</label><input type="number" className="field-input" value={editForm.rent} onChange={e => setEditForm(f => ({ ...f, rent: e.target.value }))} /></div>
+            <div className="field"><label className="field-label">Phone</label><input className="field-input" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
+            <div className="field col-span-2"><label className="field-label">Email</label><input className="field-input" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
+            <div className="field"><label className="field-label">Lease end</label><input type="date" className="field-input" value={editForm.leaseEnd} onChange={e => setEditForm(f => ({ ...f, leaseEnd: e.target.value }))} /></div>
+          </div>
+        </Modal>
+
       {/* Add Tenant Modal */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Tenant" size="lg"
         footer={<><button className="btn" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={handleAdd}>Add tenant</button></>}>
@@ -151,6 +186,34 @@ export default function TenantsPage() {
           <div className="field col-span-2"><label className="field-label">Email</label><input type="email" className="field-input" placeholder="tenant@example.com" value={form.email} onChange={e => setForm(f=>({...f,email:e.target.value}))} /></div>
           <div className="field"><label className="field-label">Lease start</label><input type="date" className="field-input" value={form.leaseStart} onChange={e => setForm(f=>({...f,leaseStart:e.target.value}))} /></div>
           <div className="field"><label className="field-label">Lease end</label><input type="date" className="field-input" value={form.leaseEnd} onChange={e => setForm(f=>({...f,leaseEnd:e.target.value}))} /></div>
+        </div>
+      </Modal>
+
+      <Modal open={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setDeletingId(null); setDeletePassword('') }} title="Confirm delete" size="sm"
+        footer={<>
+          <button className="btn" onClick={() => { setDeleteConfirmOpen(false); setDeletingId(null); setDeletePassword('') }}>Cancel</button>
+          <button className="btn-primary btn" onClick={async () => {
+            if (!deletingId) return
+            if (!deletePassword) { showToast('error', 'Enter your password to confirm.'); return }
+            const name = tenants.find(t => t.id === deletingId)?.name ?? 'this tenant'
+            if (!window.confirm(`Delete ${name} permanently?`)) return
+            try {
+              await deleteTenant(deletingId, deletePassword)
+              showToast('success', `${name} removed.`)
+              setDeleteConfirmOpen(false)
+              setDeletingId(null)
+              setDeletePassword('')
+              setSelected(null)
+            } catch (err) { showToast('error', err instanceof Error ? err.message : 'Unable to delete tenant.') }
+          }}>Delete</button>
+        </>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm">This action will remove the tenant and related records. Enter your account password to confirm.</p>
+          <div className="field">
+            <label className="field-label">Password *</label>
+            <input className="field-input" type="password" value={deletePassword} onChange={e => setDeletePassword(e.target.value)} />
+          </div>
         </div>
       </Modal>
     </div>

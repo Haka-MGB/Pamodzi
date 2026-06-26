@@ -15,9 +15,13 @@ interface ModalProps {
 export default function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
   useEffect(() => {
     if (!open) return
+    document.body.classList.add('modal-open')
     function handle(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handle)
-    return () => document.removeEventListener('keydown', handle)
+    return () => {
+      document.body.classList.remove('modal-open')
+      document.removeEventListener('keydown', handle)
+    }
   }, [open, onClose])
 
   if (!open) return null
@@ -30,11 +34,8 @@ export default function Modal({ open, onClose, title, children, footer, size = '
         <div className="modal-header">
           <h2 className="modal-title">{title}</h2>
           <button onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer"
-            style={{ border: '1px solid var(--border-light)', background: 'transparent', color: 'var(--text-muted)' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-surface-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-            <X size={13} />
+            className="modal-close">
+            <X size={16} />
           </button>
         </div>
         <div className="modal-body">{children}</div>

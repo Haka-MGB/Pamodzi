@@ -20,6 +20,27 @@ export default function SettingsPage() {
   const [photoName, setPhotoName] = useState('')
   const photoInputRef = useRef<HTMLInputElement>(null)
 
+  function handleSaveSettings() {
+    if (!window.confirm('Save these settings changes?')) return
+    showToast('success','Settings saved successfully.')
+  }
+
+  function handleUpdatePassword() {
+    if (!window.confirm('Save this password change?')) return
+    showToast('success','Password updated.')
+  }
+
+  function handleTogglePreference(key: keyof typeof notifs) {
+    if (!window.confirm('Save this notification preference change?')) return
+    setNotifs(n => ({ ...n, [key]: !n[key] }))
+    showToast('info','Preference saved.')
+  }
+
+  function handleToggleDarkMode() {
+    if (!window.confirm('Save this theme preference change?')) return
+    toggleDark()
+  }
+
   return (
     <div className="animate-fade-in max-w-4xl">
       <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
@@ -27,7 +48,7 @@ export default function SettingsPage() {
           <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>Settings</h1>
           <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>Account, notifications & system preferences</p>
         </div>
-        <button className="btn-primary btn" onClick={() => showToast('success','Settings saved successfully.')}> Save changes</button>
+        <button className="btn-primary btn" onClick={handleSaveSettings}> Save changes</button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -77,7 +98,7 @@ export default function SettingsPage() {
                   <input type="password" placeholder="••••••••" className="field-input" />
                 </div>
               ))}
-              <button className="btn" onClick={() => showToast('success','Password updated.')}>Update password</button>
+              <button className="btn" onClick={handleUpdatePassword}>Update password</button>
             </div>
           </div>
         </div>
@@ -99,7 +120,7 @@ export default function SettingsPage() {
                     <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{label}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</p>
                   </div>
-                  <Toggle checked={(notifs as any)[key]} onChange={() => { setNotifs(n => ({ ...n, [key]: !(n as any)[key] })); showToast('info','Preference saved.') }} />
+                  <Toggle checked={notifs[key as keyof typeof notifs]} onChange={() => handleTogglePreference(key as keyof typeof notifs)} />
                 </div>
               ))}
             </div>
@@ -114,7 +135,7 @@ export default function SettingsPage() {
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Dark mode</p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Toggle between light and dark theme</p>
                 </div>
-                <Toggle checked={darkMode} onChange={toggleDark} />
+                <Toggle checked={darkMode} onChange={handleToggleDarkMode} />
               </div>
               {[
                 { label:'Currency', opts:['ZMW — Zambian Kwacha (K)','USD — US Dollar ($)'] },

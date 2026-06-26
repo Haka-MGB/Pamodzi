@@ -20,7 +20,6 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useApp } from '@/context/AppContext'
-import { DEMO_EMAIL, DEMO_PASSWORD } from '@/lib/data'
 
 type AuthMode = 'sign-in' | 'create-account' | 'reset-password'
 
@@ -28,8 +27,8 @@ export default function LoginPage() {
   const { login, registerAccount } = useApp()
   const router = useRouter()
   const [mode, setMode] = useState<AuthMode>('sign-in')
-  const [email, setEmail] = useState(DEMO_EMAIL)
-  const [password, setPassword] = useState(DEMO_PASSWORD)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [name, setName] = useState('')
   const [company, setCompany] = useState('')
@@ -62,8 +61,8 @@ export default function LoginPage() {
         company.trim().length > 1 &&
         phone.trim().length > 5 &&
         email.trim().length > 3 &&
-        password.length >= 6 &&
-        confirmPassword.length >= 6 &&
+        password.length >= 8 &&
+        confirmPassword.length >= 8 &&
         termsAccepted
       )
     }
@@ -77,7 +76,7 @@ export default function LoginPage() {
     setShowPassword(false)
 
     if (nextMode === 'sign-in') {
-      setPassword(DEMO_PASSWORD)
+      setPassword('')
       setConfirmPassword('')
       return
     }
@@ -93,14 +92,6 @@ export default function LoginPage() {
     setConfirmPassword('')
   }
 
-  function fillDemoCredentials() {
-    setMode('sign-in')
-    setEmail(DEMO_EMAIL)
-    setPassword(DEMO_PASSWORD)
-    setConfirmPassword('')
-    setError('')
-    setNotice('Demo credentials added.')
-  }
 
   function rememberEmailAddress(value: string) {
     if (rememberMe) {
@@ -125,7 +116,7 @@ export default function LoginPage() {
       setLoading(true)
       await new Promise(r => setTimeout(r, 700))
       setLoading(false)
-      setNotice(`Password reset instructions are ready for ${email.trim()}. In this demo, use the sample credentials or create a new account.`)
+      setNotice(`Password reset instructions are ready for ${email.trim()}. If you don't have an account, you can create one.`)
       return
     }
 
@@ -295,23 +286,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-6 rounded-xl border border-[#E5DFD3] bg-[#FBFAF7] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E9E5D6] text-[#2D6A4F]">
-                <Sparkles className="h-4 w-4" />
-              </span>
-              <div>
-                <p className="text-sm font-black text-[#1E2A2A]">Demo access</p>
-                <p className="text-xs text-[#5A6B5E]">{DEMO_EMAIL}</p>
-              </div>
-            </div>
-            <button type="button" onClick={fillDemoCredentials} className="rounded-lg border border-[#D1C9B8] bg-white px-3 py-2 text-xs font-black text-[#2D6A4F] transition hover:border-[#2D6A4F] hover:bg-[#F0FAF5]">
-              Fill details
-            </button>
-          </div>
-          <p className="mt-3 text-xs text-[#5A6B5E]">Password: <strong className="font-black text-[#1F4D38]">{DEMO_PASSWORD}</strong></p>
-        </div>
+        {/* Demo credentials removed */}
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-[#5A6B5E]">
           {mode !== 'sign-in' ? (
@@ -402,7 +377,7 @@ function PasswordField({
           onChange={e => onChange(e.target.value)}
           autoComplete={id === 'password' ? 'current-password' : 'new-password'}
           required
-          minLength={6}
+          minLength={8}
           className="h-12 w-full rounded-xl border border-[#E5DFD3] bg-[#FBFAF7] pl-11 pr-12 text-sm text-[#1E2A2A] outline-none transition placeholder:text-[#8F9A8E] focus:border-[#2D6A4F] focus:bg-white focus:shadow-[0_0_0_3px_rgba(45,106,79,0.12)]"
           placeholder={placeholder}
         />

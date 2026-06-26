@@ -1,19 +1,25 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useApp } from '@/context/AppContext'
 import { downloadExcelFile, downloadPdfFile, downloadTextFile, fmtK } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import StatCard from '@/components/ui/StatCard'
-import { Download, Plus, Search, CheckCircle, Clock, AlertTriangle, CreditCard } from 'lucide-react'
+import { Download, Plus, Search, CheckCircle, Clock, AlertTriangle, ChevronDown } from 'lucide-react'
 
 export default function PaymentsPage() {
-  const { payments, tenants, confirmPayment, addPayment, showToast } = useApp()
+  const { payments, tenants, confirmPayment, addPayment, deletePayment, showToast } = useApp()
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [confirmId,    setConfirmId]    = useState<string | null>(null)
   const [addOpen,      setAddOpen]      = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletePassword, setDeletePassword] = useState('')
   const [form, setForm] = useState({ tenantId: '', tenantName: '', method: 'Airtel Money', ref: '', date: '', period: 'May 2026' })
+  const [tenantPickerOpen, setTenantPickerOpen] = useState(false)
+  const [activeTenantIndex, setActiveTenantIndex] = useState(0)
+  const tenantPickerRef = useRef<HTMLDivElement>(null)
 
   const filtered = payments.filter(p => {
     const matchSearch = p.tenant.toLowerCase().includes(search.toLowerCase()) ||
@@ -29,6 +35,32 @@ export default function PaymentsPage() {
   const totalCollected = paid.reduce((s, p) => s + p.amount, 0)
 
   const confirmingPayment = payments.find(p => p.id === confirmId)
+  const tenantQuery = form.tenantName.trim().toLowerCase()
+  const filteredTenants = useMemo(() => {
+    const matches = tenantQuery.length === 0
+      ? tenants
+      : tenants.filter(t =>
+          t.name.toLowerCase().includes(tenantQuery) ||
+          t.unit.toLowerCase().includes(tenantQuery) ||
+          t.propertyName.toLowerCase().includes(tenantQuery)
+        )
+
+    return matches.slice(0, 8)
+  }, [tenantQuery, tenants])
+
+  useEffect(() => {
+    setActiveTenantIndex(0)
+  }, [tenantQuery, filteredTenants.length])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (tenantPickerRef.current && !tenantPickerRef.current.contains(e.target as Node)) {
+        setTenantPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const paymentExportRows = payments.map(p => ({
       tenant: p.tenant,
@@ -73,25 +105,88 @@ export default function PaymentsPage() {
     showToast('success', 'Receipt downloaded.')
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!confirmId) return
-    confirmPayment(confirmId)
-    showToast('success', `Payment from ${confirmingPayment?.tenant} confirmed!`)
-    setConfirmId(null)
+    try {
+      await confirmPayment(confirmId)
+      showToast('success', `Payment from ${confirmingPayment?.tenant} confirmed!`)
+      setConfirmId(null)
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Unable to confirm payment.')
+    }
   }
 
-  function handleAdd() {
+  async function handleDelete(paymentId: string) {
+    setDeletingId(paymentId)
+    setDeletePassword('')
+    setDeleteConfirmOpen(true)
+  }
+
+  function selectTenant(tenant: (typeof tenants)[number]) {
+    setForm(f => ({ ...f, tenantId: tenant.id, tenantName: tenant.name }))
+    setTenantPickerOpen(false)
+  }
+
+  function handleTenantInput(value: string) {
+    const tenant = tenants.find(t =>
+      t.name.toLowerCase() === value.trim().toLowerCase() ||
+      `${t.name} - ${t.unit}`.toLowerCase() === value.trim().toLowerCase()
+    )
+    setForm(f => ({ ...f, tenantName: value, tenantId: tenant?.id ?? '' }))
+    setTenantPickerOpen(true)
+  }
+
+  function handleTenantKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setTenantPickerOpen(false)
+      return
+    }
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setTenantPickerOpen(true)
+      if (filteredTenants.length > 0) {
+        setActiveTenantIndex(prev => (prev + 1) % filteredTenants.length)
+      }
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setTenantPickerOpen(true)
+      if (filteredTenants.length > 0) {
+        setActiveTenantIndex(prev => (prev - 1 + filteredTenants.length) % filteredTenants.length)
+      }
+    }
+
+    if (e.key === 'Enter' && tenantPickerOpen && filteredTenants[activeTenantIndex]) {
+      e.preventDefault()
+      selectTenant(filteredTenants[activeTenantIndex])
+    }
+  }
+
+  function closeAddPaymentModal() {
+    setAddOpen(false)
+    setTenantPickerOpen(false)
+    setActiveTenantIndex(0)
+  }
+
+  async function handleAdd() {
     const tenant = tenants.find(t => t.id === form.tenantId) ||
       tenants.find(t => t.name.toLowerCase() === form.tenantName.trim().toLowerCase())
     if (!tenant || !form.ref) { showToast('error', 'Please fill all required fields'); return }
-    addPayment({
-      tenantId: tenant.id, tenant: tenant.name, unit: `${tenant.unit} · ${tenant.propertyName}`,
-      amount: tenant.rent, method: form.method, ref: form.ref,
-      status: 'pending', date: form.date || 'Today', period: form.period,
-    })
-    showToast('success', 'Payment recorded successfully.')
-    setAddOpen(false)
-    setForm({ tenantId: '', tenantName: '', method: 'Airtel Money', ref: '', date: '', period: 'May 2026' })
+    if (!window.confirm(`Save this payment for ${tenant.name}?`)) return
+    try {
+      await addPayment({
+        tenantId: tenant.id, tenant: tenant.name, unit: `${tenant.unit} · ${tenant.propertyName}`,
+        amount: tenant.rent, method: form.method, ref: form.ref,
+        status: 'pending', date: form.date || 'Today', period: form.period,
+      })
+      showToast('success', 'Payment recorded successfully.')
+      closeAddPaymentModal()
+      setForm({ tenantId: '', tenantName: '', method: 'Airtel Money', ref: '', date: '', period: 'May 2026' })
+    } catch (error) {
+      showToast('error', error instanceof Error ? error.message : 'Unable to save payment.')
+    }
   }
 
   return (
@@ -105,7 +200,7 @@ export default function PaymentsPage() {
         <div className="flex gap-2 flex-wrap">
           <button className="btn" onClick={exportPaymentsExcel}><Download size={13} /> Excel</button>
           <button className="btn" onClick={exportPaymentsPdf}><Download size={13} /> PDF</button>
-          <button className="btn-primary btn" onClick={() => setAddOpen(true)}><Plus size={13} /> Record payment</button>
+          <button className="btn-primary btn" onClick={() => { setTenantPickerOpen(false); setAddOpen(true) }}><Plus size={13} /> Record payment</button>
         </div>
       </div>
 
@@ -156,13 +251,16 @@ export default function PaymentsPage() {
                   <td><span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{p.ref}</span></td>
                   <td><span style={{ fontSize: '0.82rem' }}>{p.date}</span></td>
                   <td>
-                    {p.status === 'pending' ? (
-                      <button className="btn btn-sm btn-primary" onClick={() => setConfirmId(p.id)}>Confirm</button>
-                    ) : p.status === 'overdue' ? (
-                      <button className="btn btn-sm" onClick={() => showToast('info', `Reminder sent to ${p.tenant}`)}>Remind</button>
-                    ) : (
-                      <button className="btn btn-sm" onClick={() => downloadReceipt(p.id)}>Receipt</button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {p.status === 'pending' ? (
+                        <button className="btn btn-sm btn-primary" onClick={() => setConfirmId(p.id)}>Confirm</button>
+                      ) : p.status === 'overdue' ? (
+                        <button className="btn btn-sm" onClick={() => showToast('info', `Reminder sent to ${p.tenant}`)}>Remind</button>
+                      ) : (
+                        <button className="btn btn-sm" onClick={() => downloadReceipt(p.id)}>Receipt</button>
+                      )}
+                      <button className="btn btn-sm" onClick={() => handleDelete(p.id)}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -188,27 +286,103 @@ export default function PaymentsPage() {
         )}
       </Modal>
 
+      <Modal open={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setDeletingId(null); setDeletePassword('') }} title="Confirm delete" size="sm"
+        footer={<>
+          <button className="btn" onClick={() => { setDeleteConfirmOpen(false); setDeletingId(null); setDeletePassword('') }}>Cancel</button>
+          <button className="btn-primary btn" onClick={async () => {
+            if (!deletingId) return
+            if (!deletePassword) { showToast('error', 'Enter your password to confirm.'); return }
+            if (!window.confirm('Delete this payment record permanently?')) return
+            try {
+              await deletePayment(deletingId, deletePassword)
+              showToast('success', 'Payment deleted.')
+              setDeleteConfirmOpen(false)
+              setDeletingId(null)
+              setDeletePassword('')
+            } catch (err) { showToast('error', err instanceof Error ? err.message : 'Unable to delete payment.') }
+          }}>Delete</button>
+        </>}
+      >
+        <div className="space-y-3">
+          <p className="text-sm">This will permanently delete the payment record. Enter your account password to confirm.</p>
+          <div className="field">
+            <label className="field-label">Password *</label>
+            <input className="field-input" type="password" value={deletePassword} onChange={e => setDeletePassword(e.target.value)} />
+          </div>
+        </div>
+      </Modal>
+
       {/* Add Payment Modal */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Record Payment"
-        footer={<><button className="btn" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={handleAdd}>Save payment</button></>}>
+      <Modal open={addOpen} onClose={closeAddPaymentModal} title="Record Payment"
+        footer={<><button className="btn" onClick={closeAddPaymentModal}>Cancel</button><button className="btn-primary btn" onClick={handleAdd}>Save payment</button></>}>
         <div className="space-y-4">
           <div className="field">
             <label className="field-label">Tenant *</label>
-            <input
-              className="field-input"
-              list="payment-tenants"
-              placeholder="Search or type tenant name..."
-              value={form.tenantName}
-              onChange={e => {
-                const tenantName = e.target.value
-                const tenant = tenants.find(t => `${t.name} - ${t.unit}` === tenantName || t.name.toLowerCase() === tenantName.trim().toLowerCase())
-                setForm(f => ({ ...f, tenantName, tenantId: tenant?.id ?? '' }))
-              }}
-            />
-            <datalist id="payment-tenants">
-              {tenants.map(t => <option key={t.id} value={`${t.name} - ${t.unit}`} />)}
-            </datalist>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>Start typing to search, or choose a tenant from the suggestions.</p>
+            <div ref={tenantPickerRef} className="relative">
+              <div className="relative">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
+                <input
+                  className="field-input pl-9 pr-10"
+                  placeholder="Search tenant name, unit or property..."
+                  value={form.tenantName}
+                  onChange={e => handleTenantInput(e.target.value)}
+                  onFocus={() => setTenantPickerOpen(true)}
+                  onKeyDown={handleTenantKeyDown}
+                  role="combobox"
+                  aria-expanded={tenantPickerOpen}
+                  aria-controls="payment-tenant-options"
+                  aria-autocomplete="list"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md transition-all hover:bg-[var(--bg-surface-hover)]"
+                  onClick={() => setTenantPickerOpen(open => !open)}
+                  aria-label="Show tenants"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <ChevronDown size={15} />
+                </button>
+              </div>
+              {tenantPickerOpen && (
+                <div
+                  id="payment-tenant-options"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-[var(--border-light)] bg-[var(--bg-surface)] shadow-lg shadow-black/5"
+                  role="listbox"
+                >
+                  {filteredTenants.length > 0 ? (
+                    <div className="max-h-64 overflow-y-auto">
+                      {filteredTenants.map((tenant, index) => (
+                        <button
+                          key={tenant.id}
+                          type="button"
+                          role="option"
+                          aria-selected={form.tenantId === tenant.id}
+                          className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors"
+                          style={{ background: index === activeTenantIndex ? 'var(--bg-page)' : 'transparent' }}
+                          onMouseEnter={() => setActiveTenantIndex(index)}
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => selectTenant(tenant)}
+                        >
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: 'var(--accent-primary)' }}>
+                            {tenant.initials}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{tenant.name}</p>
+                            <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>{tenant.unit} - {tenant.propertyName}</p>
+                          </div>
+                          <span className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{fmtK(tenant.rent)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-3.5 py-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      No tenant matches that search.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>Type to filter tenants, or open the dropdown and choose one.</p>
           </div>
           <div className="field">
             <label className="field-label">Payment method</label>

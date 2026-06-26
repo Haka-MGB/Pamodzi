@@ -39,19 +39,33 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
-  html { height: 100%; }
+  html, body { height: 100%; }
 
   body {
     background: var(--bg-page);
     color: var(--text-primary);
     transition: background 0.25s, color 0.25s;
-    height: 100%;
+    min-height: 100dvh;
     overflow: hidden;
+    -webkit-overflow-scrolling: touch;
   }
 
   ::-webkit-scrollbar       { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 5px; }
+
+  button, a, input, select, textarea {
+    font: inherit;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
 }
 
 @layer components {
@@ -80,6 +94,11 @@
   }
   .btn:hover { background: var(--bg-surface-hover); border-color: var(--border-medium); transform: translateY(-1px); }
   .btn:active { transform: translateY(0); }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+    transform: none;
+  }
 
   .btn-primary {
     @apply btn border-transparent text-white;
@@ -110,9 +129,11 @@
   }
   .panel-title { @apply font-bold text-sm; color: var(--text-primary); }
   .scroll-panel {
-    max-height: min(58vh, 520px);
+    max-height: clamp(220px, calc(100dvh - 360px), 520px);
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* ── Stat card ── */
@@ -120,6 +141,11 @@
     @apply panel p-5 cursor-pointer;
     transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s;
     position: relative; overflow: hidden;
+  }
+  .stat-card-icon {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center mb-3;
+    background: color-mix(in srgb, var(--icon-color) 8%, transparent);
+    color: var(--icon-color);
   }
   .stat-card::after {
     content: '';
@@ -133,7 +159,7 @@
 
   /* ── Badge / Pill ── */
   .badge {
-    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold;
+    @apply inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-semibold;
   }
   .badge-paid     { background: rgba(45,106,79,0.10); color: #2D6A4F; }
   .badge-pending  { background: rgba(217,161,59,0.12); color: #B8881E; }
@@ -154,7 +180,11 @@
   .dark .badge-in-progress, .dark .badge-medium { background: rgba(90,158,217,0.15); color: #74B3E8; }
 
   /* ── Table ── */
-  .data-table { @apply w-full border-collapse; }
+  .data-table { @apply w-full border-collapse; min-width: max-content; }
+  .data-table th,
+  .data-table td {
+    white-space: nowrap;
+  }
   .data-table th {
     @apply text-left px-4 py-3 text-xs font-bold uppercase tracking-wider;
     color: var(--text-muted);
@@ -194,6 +224,8 @@
     background: rgba(0,0,0,0.45);
     backdrop-filter: blur(3px);
     animation: fadeIn 0.2s ease;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .modal {
     @apply w-full max-w-md overflow-hidden;
@@ -201,13 +233,33 @@
     border-radius: 28px;
     box-shadow: 0 24px 64px rgba(0,0,0,0.14);
     animation: scaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    max-height: min(100dvh, 92vh);
   }
   .modal-header {
-    @apply flex items-center justify-between px-6 py-5;
+    @apply flex items-center justify-between px-6 py-4;
     border-bottom: 1px solid var(--border-light);
   }
-  .modal-title { @apply font-bold text-base; }
-  .modal-body  { @apply px-6 py-5; }
+  .modal-title { @apply font-bold text-lg; color: var(--text-primary); }
+  .modal-close {
+    @apply w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer;
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-muted);
+  }
+  .modal-close:hover {
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
+  }
+  .modal-close:focus {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+  .modal-body {
+    @apply px-6 py-5;
+    max-height: calc(100dvh - 190px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .modal-footer {
     @apply flex justify-end gap-3 px-6 py-4;
     border-top: 1px solid var(--border-light);
@@ -225,8 +277,11 @@
     box-shadow: 0 0 0 3px var(--accent-primary-gl);
   }
   .search-box input {
-    @apply bg-transparent border-none outline-none text-sm w-44;
+    @apply bg-transparent border-none outline-none text-sm w-full md:w-44;
     color: var(--text-primary);
+  }
+  .modal-open {
+    overflow: hidden;
   }
   .search-box input::placeholder { color: var(--text-muted); }
 
@@ -258,4 +313,27 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   .content-fade { animation: slideUp 0.2s ease; }
+  .animate-toast-in { animation: toastIn 0.22s ease; }
+  .text-status-paid { color: #2D6A4F; }
+  .text-status-overdue { color: #C35D3A; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }

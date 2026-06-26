@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation'
 import { useApp } from '@/context/AppContext'
 import {
   LayoutDashboard, CreditCard, Users, Building2,
-  Wrench, FileBarChart2, Settings, Menu, LogOut,
+  Wrench, FileBarChart2, Settings, Menu, LogOut, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -33,7 +33,12 @@ const NAV_SECTIONS = [
   },
 ]
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean
+  onMobileClose?: () => void
+}
+
+export default function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const { sidebarCollapsed, toggleSidebar, user, payments, issues, logout } = useApp()
   const pathname = usePathname()
 
@@ -52,11 +57,12 @@ export default function Sidebar() {
     window.location.href = '/login'
   }
 
-  return (
+  const sidebar = (
     <aside
       className={cn(
-        'flex flex-col h-full transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] flex-shrink-0 overflow-hidden',
-        sidebarCollapsed ? 'w-[72px]' : 'w-[260px]',
+        'flex h-full max-h-[100dvh] min-h-0 flex-col overflow-hidden transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] flex-shrink-0',
+        mobileOpen ? 'w-[280px]' : 'hidden md:flex',
+        !mobileOpen && (sidebarCollapsed ? 'w-[72px]' : 'w-[260px]'),
       )}
       style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border-light)' }}
     >
@@ -75,15 +81,17 @@ export default function Sidebar() {
             </p>
           </div>
         )}
-        <button onClick={toggleSidebar}
+        <button onClick={mobileOpen ? onMobileClose : toggleSidebar}
           className="w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer flex-shrink-0"
+          aria-label={mobileOpen ? 'Close navigation' : 'Toggle sidebar'}
           style={{ background: 'var(--bg-surface-hover)', border: '1px solid var(--border-light)', color: 'var(--text-muted)' }}>
-          <Menu size={14} />
+          {mobileOpen ? <X size={14} /> : <Menu size={14} />}
         </button>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2.5 py-4 overflow-y-auto scrollbar-hide space-y-0.5">
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2.5 py-4 scrollbar-hide space-y-0.5"
+        style={{ WebkitOverflowScrolling: 'touch' }}>
         {NAV_SECTIONS.map(section => (
           <div key={section.label}>
             {!sidebarCollapsed && (
@@ -99,6 +107,7 @@ export default function Sidebar() {
               return (
                 <Link key={item.href} href={item.href}
                   title={sidebarCollapsed ? item.label : undefined}
+                  onClick={onMobileClose}
                   className={cn('nav-item', active && 'active', sidebarCollapsed && 'justify-center px-3')}>
                   <Icon size={17} className="flex-shrink-0" />
                   {!sidebarCollapsed && <span className="flex-1">{item.label}</span>}
@@ -141,5 +150,21 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+  )
+
+  if (!mobileOpen) return sidebar
+
+  return (
+    <div className="fixed inset-0 z-50 md:hidden">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/45"
+        aria-label="Close navigation"
+        onClick={onMobileClose}
+      />
+      <div className="relative h-full w-[280px] max-w-[86vw]">
+        {sidebar}
+      </div>
+    </div>
   )
 }
