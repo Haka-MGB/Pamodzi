@@ -147,7 +147,7 @@ VALUES (
   '+260000000000',
   'Pamodzi',
   'TU',
-  '$2b$10$k4DzMN4Kd7RXCgKRR.qNeOF6B1TQ5Xr5OQ6E5qXqUGbRiY6iVp4sC', -- password123 hashed with bcrypt
+  '$2b$10$k4DzMN4Kd7RXCgKRR.qNeOF6B1TQ5Xr5OQ6E5qXqUGbRiY6iVp4sC',
   NOW(),
   NOW()
 )
