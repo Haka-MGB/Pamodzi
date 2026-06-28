@@ -204,8 +204,8 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {mode === 'create-account' && (
             <>
-              <TextField id="name" label="Full name" value={name} onChange={setName} placeholder="James Mwale" icon={<UserRound className="h-4 w-4" />} autoComplete="name" />
-              <TextField id="company" label="Company" value={company} onChange={setCompany} placeholder="Mwale Properties Ltd" icon={<BriefcaseBusiness className="h-4 w-4" />} autoComplete="organization" />
+              <TextField id="name" label="Full name" value={name} onChange={setName} placeholder="Jane Smith" icon={<UserRound className="h-4 w-4" />} autoComplete="name" />
+              <TextField id="company" label="Company" value={company} onChange={setCompany} placeholder="ABC Property Management" icon={<BriefcaseBusiness className="h-4 w-4" />} autoComplete="organization" />
               <TextField id="phone" label="Phone number" value={phone} onChange={setPhone} placeholder="+260 977 123456" icon={<Phone className="h-4 w-4" />} autoComplete="tel" />
             </>
           )}

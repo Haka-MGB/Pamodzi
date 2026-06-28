@@ -10,10 +10,10 @@ export default function AlertsPanel() {
   const pending    = pays.filter((p: any) => p.status === 'pending').length
 
   const alerts = [
-    { dot: 'bg-red-500',   title: 'Rent overdue — Priscilla Zulu',        sub: 'A5 Parklands · 9 days late · K2,200',        time: '9d',   link: '/payments' },
-    { dot: 'bg-amber-500', title: `${pending} bank transfers pending`,     sub: 'Grace Phiri & Isaac Tembo awaiting confirm', time: 'Today',link: '/payments' },
-    { dot: 'bg-red-500',   title: 'Urgent repair — Roof leak',             sub: 'D2 Ndola East · Tendai Moyo',                time: '4d',   link: '/maintenance' },
-    { dot: 'bg-amber-500', title: 'Lease expiring soon',                   sub: 'Priscilla Zulu · A5 Parklands · May 2026',   time: '30d',  link: '/tenants' },
+    { dot: 'bg-red-500',   title: 'Rent overdue — Tenant E',        sub: 'A5 Parklands · 9 days late · K2,200',        time: '9d',   link: '/payments' },
+    { dot: 'bg-amber-500', title: `${pending} bank transfers pending`,     sub: 'Tenant C & Tenant D awaiting confirm', time: 'Today',link: '/payments' },
+    { dot: 'bg-red-500',   title: 'Urgent repair — Roof leak',             sub: 'D2 Ndola East · Tenant G',                time: '4d',   link: '/maintenance' },
+    { dot: 'bg-amber-500', title: 'Lease expiring soon',                   sub: 'Tenant E · A5 Parklands · May 2026',   time: '30d',  link: '/tenants' },
   ]
 
   return (

@@ -205,7 +205,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <StatCard icon={<CheckCircle size={18} />} value={fmtK(totalCollected)} label={`Collected · ${paid.length} payments`} trend="8% vs March" trendUp />
         <StatCard icon={<Clock size={18} />} value={String(pending.length)} label="Awaiting confirmation" accentColor="#D9A13B" />
         <StatCard icon={<AlertTriangle size={18} />} value={String(overdue.length)} label="Overdue · Action needed" accentColor="#C35D3A" />

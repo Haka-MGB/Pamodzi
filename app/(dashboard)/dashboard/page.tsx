@@ -10,7 +10,7 @@ import ActivityFeed from '@/components/charts/ActivityFeed'
 import AlertsPanel from '@/components/charts/AlertsPanel'
 
 export default function DashboardPage() {
-  const { payments, tenants, issues, properties, showToast } = useApp()
+  const { payments, tenants, issues, properties, revenueData, showToast } = useApp()
   const router = useRouter()
   const paid = payments.filter(p => p.status === 'paid')
   const totalCollected = paid.reduce((s, p) => s + p.amount, 0)
@@ -35,7 +35,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={<Wallet size={18} />} value={fmtK(totalCollected)} label={`Collected · April 2026`} trend="8% vs March" trendUp onClick={() => router.push('/payments')} />
         <StatCard icon={<Users size={18} />} value={String(tenants.filter(t => t.status === 'active').length)} label={`Active tenants · ${pending} pending`} trend="1 new this month" trendUp onClick={() => router.push('/tenants')} />
         <StatCard icon={<Wrench size={18} />} value={String(openIssues)} label="Open maintenance issues" trend="1 urgent needs action" trendUp={false} accentColor="#C35D3A" onClick={() => router.push('/maintenance')} />
@@ -43,19 +43,19 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Revenue — last 6 months</span></div>
-          <div className="p-5"><RevenueChart /></div>
+          <div className="p-3 sm:p-5"><RevenueChart data={revenueData} /></div>
         </div>
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Payment status breakdown</span></div>
-          <div className="p-5"><StatusDonut paid={paid.length} pending={pending} overdue={payments.filter(p=>p.status==='overdue').length} /></div>
+          <div className="p-3 sm:p-5"><StatusDonut paid={paid.length} pending={pending} overdue={payments.filter(p=>p.status==='overdue').length} /></div>
         </div>
       </div>
 
       {/* Alerts + Activity */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <AlertsPanel />
         <div className="panel">
           <div className="panel-header"><span className="panel-title">Recent activity</span></div>

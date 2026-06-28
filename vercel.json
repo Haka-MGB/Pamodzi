@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npm run build",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "env": {
+    "PAMODZI_SESSION_SECRET": "@pamodzi-session-secret"
+  }
+}

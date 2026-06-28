@@ -173,7 +173,7 @@ export default function TenantsPage() {
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Tenant" size="lg"
         footer={<><button className="btn" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={handleAdd}>Add tenant</button></>}>
         <div className="grid grid-cols-2 gap-4">
-          <div className="field col-span-2"><label className="field-label">Full name *</label><input className="field-input" placeholder="e.g. Joseph Phiri" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} /></div>
+          <div className="field col-span-2"><label className="field-label">Full name *</label><input className="field-input" placeholder="e.g. Jane Smith" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} /></div>
           <div className="field">
             <label className="field-label">Property *</label>
             <select className="field-select" value={form.propertyId} onChange={e => { const p=PROPERTIES.find(x=>x.id===e.target.value)!; setForm(f=>({...f,propertyId:e.target.value,propertyName:p.name})) }}>

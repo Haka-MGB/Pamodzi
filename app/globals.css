@@ -86,7 +86,7 @@
 
   /* ── Buttons ── */
   .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-xs border
+    @apply inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-semibold text-xs border
            cursor-pointer transition-all duration-200 select-none;
     background: var(--bg-surface);
     border-color: var(--border-light);
@@ -113,21 +113,21 @@
   .btn-ghost { @apply btn border-transparent; background: transparent; }
   .btn-ghost:hover { background: var(--bg-surface-hover); }
 
-  .btn-sm { @apply text-xs px-3 py-1.5; }
+  .btn-sm { @apply text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5; }
   .btn-lg { @apply text-sm px-5 py-3; }
 
   /* ── Cards / Panels ── */
   .panel {
     background: var(--bg-surface);
     border: 1px solid var(--border-light);
-    @apply rounded-xl overflow-hidden;
+    @apply rounded-lg sm:rounded-xl overflow-hidden;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
   .panel-header {
-    @apply flex items-center justify-between gap-3 px-5 py-4;
+    @apply flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4;
     border-bottom: 1px solid var(--border-light);
   }
-  .panel-title { @apply font-bold text-sm; color: var(--text-primary); }
+  .panel-title { @apply font-bold text-xs sm:text-sm; color: var(--text-primary); }
   .scroll-panel {
     max-height: clamp(220px, calc(100dvh - 360px), 520px);
     min-height: 0;
@@ -138,12 +138,12 @@
 
   /* ── Stat card ── */
   .stat-card {
-    @apply panel p-5 cursor-pointer;
+    @apply panel p-3 sm:p-5 cursor-pointer;
     transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s;
     position: relative; overflow: hidden;
   }
   .stat-card-icon {
-    @apply w-10 h-10 rounded-xl flex items-center justify-center mb-3;
+    @apply w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center mb-2 sm:mb-3;
     background: color-mix(in srgb, var(--icon-color) 8%, transparent);
     color: var(--icon-color);
   }
@@ -184,14 +184,23 @@
   .data-table th,
   .data-table td {
     white-space: nowrap;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  @media (min-width: 640px) {
+    .data-table th,
+    .data-table td {
+      padding-left: 16px;
+      padding-right: 16px;
+    }
   }
   .data-table th {
-    @apply text-left px-4 py-3 text-xs font-bold uppercase tracking-wider;
+    @apply text-left py-3 text-xs font-bold uppercase tracking-wider;
     color: var(--text-muted);
     border-bottom: 1px solid var(--border-light);
   }
   .data-table td {
-    @apply px-4 py-3.5 text-sm;
+    @apply py-3.5 text-sm;
     color: var(--text-primary);
     border-bottom: 1px solid var(--border-light);
   }
@@ -220,7 +229,7 @@
 
   /* ── Modal ── */
   .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center p-5;
+    @apply fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5;
     background: rgba(0,0,0,0.45);
     backdrop-filter: blur(3px);
     animation: fadeIn 0.2s ease;
@@ -230,16 +239,21 @@
   .modal {
     @apply w-full max-w-md overflow-hidden;
     background: var(--bg-surface);
-    border-radius: 28px;
+    border-radius: 20px;
     box-shadow: 0 24px 64px rgba(0,0,0,0.14);
     animation: scaleIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
     max-height: min(100dvh, 92vh);
   }
+  @media (min-width: 640px) {
+    .modal {
+      border-radius: 28px;
+    }
+  }
   .modal-header {
-    @apply flex items-center justify-between px-6 py-4;
+    @apply flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4;
     border-bottom: 1px solid var(--border-light);
   }
-  .modal-title { @apply font-bold text-lg; color: var(--text-primary); }
+  .modal-title { @apply font-bold text-base sm:text-lg; color: var(--text-primary); }
   .modal-close {
     @apply w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer;
     border: 1px solid var(--border-light);
@@ -255,19 +269,19 @@
     outline-offset: 2px;
   }
   .modal-body {
-    @apply px-6 py-5;
+    @apply px-4 sm:px-6 py-4 sm:py-5;
     max-height: calc(100dvh - 190px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
   .modal-footer {
-    @apply flex justify-end gap-3 px-6 py-4;
+    @apply flex justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4;
     border-top: 1px solid var(--border-light);
   }
 
   /* ── Search box ── */
   .search-box {
-    @apply flex items-center gap-2 rounded-full px-3.5 py-2;
+    @apply flex items-center gap-2 rounded-full px-3 sm:px-3.5 py-1.5 sm:py-2;
     background: var(--bg-page);
     border: 1px solid var(--border-light);
     transition: border-color 0.2s, box-shadow 0.2s;
@@ -277,7 +291,7 @@
     box-shadow: 0 0 0 3px var(--accent-primary-gl);
   }
   .search-box input {
-    @apply bg-transparent border-none outline-none text-sm w-full md:w-44;
+    @apply bg-transparent border-none outline-none text-xs sm:text-sm w-full md:w-44;
     color: var(--text-primary);
   }
   .modal-open {

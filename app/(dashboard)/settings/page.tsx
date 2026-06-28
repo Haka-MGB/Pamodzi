@@ -51,12 +51,12 @@ export default function SettingsPage() {
         <button className="btn-primary btn" onClick={handleSaveSettings}> Save changes</button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Profile */}
         <div>
           <div className="panel mb-5">
             <div className="panel-header"><User size={14} style={{ color: 'var(--accent-primary)' }} /><span className="panel-title">Profile information</span></div>
-            <div className="p-5">
+            <div className="p-3 sm:p-5">
               <div className="flex items-center gap-4 mb-5 pb-5" style={{ borderBottom: '1px solid var(--border-light)' }}>
                 <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold flex-shrink-0 relative"
                      style={{ background: 'var(--accent-primary)' }}>
@@ -91,7 +91,7 @@ export default function SettingsPage() {
           {/* Security */}
           <div className="panel">
             <div className="panel-header"><Shield size={14} style={{ color: 'var(--accent-primary)' }} /><span className="panel-title">Security</span></div>
-            <div className="p-5 space-y-4">
+            <div className="p-3 sm:p-5 space-y-4">
               {['Current password','New password','Confirm new password'].map(label => (
                 <div key={label} className="field">
                   <label className="field-label">{label}</label>
@@ -107,7 +107,7 @@ export default function SettingsPage() {
           {/* Notifications */}
           <div className="panel mb-5">
             <div className="panel-header"><Bell size={14} style={{ color: 'var(--accent-primary)' }} /><span className="panel-title">Notifications</span></div>
-            <div className="p-5">
+            <div className="p-3 sm:p-5">
               {[
                 { key:'email',       label:'Email alerts for overdue rent',     sub:'Receive email when rent is overdue' },
                 { key:'sms',         label:'SMS alerts via mobile money',        sub:'Get notified of payments received' },
@@ -129,7 +129,7 @@ export default function SettingsPage() {
           {/* System */}
           <div className="panel">
             <div className="panel-header"><Settings2 size={14} style={{ color: 'var(--accent-primary)' }} /><span className="panel-title">System preferences</span></div>
-            <div className="p-5 space-y-4">
+            <div className="p-3 sm:p-5 space-y-4">
               <div className="flex items-center justify-between py-1">
                 <div>
                   <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Dark mode</p>

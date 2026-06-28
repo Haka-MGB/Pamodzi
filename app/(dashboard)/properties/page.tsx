@@ -78,7 +78,7 @@ export default function PropertiesPage() {
         <button className="btn-primary btn" onClick={() => setAddOpen(true)}><Plus size={13} /> Add property</button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         <StatCard icon={<Building2 size={18}/>} value={String(properties.length)} label="Total properties" />
         <StatCard icon={<DoorOpen size={18}/>} value={`${occupiedUnits}/${totalUnits}`} label="Units occupied" />
         <StatCard icon={<Wallet size={18}/>} value={fmtK(totalRevenue)} label="Monthly revenue" />

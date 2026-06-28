@@ -79,7 +79,7 @@ export default function MaintenancePage() {
         <button className="btn-primary btn" onClick={() => setAddOpen(true)}><Plus size={13} /> Log issue</button>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={<Flame size={18}/>}          value={String(urgentCount)}     label="Urgent"              accentColor="#C35D3A" />
         <StatCard icon={<AlertTriangle size={18}/>}   value={String(highCount)}       label="High priority"       accentColor="#D9A13B" />
         <StatCard icon={<Wrench size={18}/>}          value={String(inProgCount)}     label="In progress"         accentColor="#4A90D9" />
