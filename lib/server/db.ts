@@ -1,19 +1,7 @@
-import fs from 'fs/promises'
-import path from 'path'
 import crypto from 'crypto'
 import type { ActivityItem, MaintenanceIssue, Notification, Payment, Property, RevenueDataPoint, Tenant, User } from '@/types'
-import {
-  MOCK_ACTIVITY,
-  MOCK_ISSUES,
-  MOCK_NOTIFICATIONS,
-  MOCK_PAYMENTS,
-  MOCK_PROPERTIES,
-  MOCK_REVENUE,
-  MOCK_TENANTS,
-  MOCK_USER,
-} from '@/lib/data'
-import { getDataFilePath } from './config'
 import { hashPassword, verifyPassword } from './password'
+import { getSupabaseClient } from './supabase'
 
 interface StoredUser extends User {
   passwordHash: string
@@ -23,28 +11,76 @@ interface StoredUser extends User {
 
 type Owned<T> = T & { ownerId: string; createdAt: string; updatedAt: string }
 
-interface AppDb {
-  version: 1
-  users: StoredUser[]
-  properties: Owned<Property>[]
-  tenants: Owned<Tenant>[]
-  payments: Owned<Payment>[]
-  issues: Owned<MaintenanceIssue>[]
-  notifications: Owned<Notification>[]
-  activity: Owned<ActivityItem>[]
-  revenueData: Owned<RevenueDataPoint & { id: string }>[]
+// Helper type for database operations
+type DbResult<T> = { data: T | null; error: any }
+
+let isInitialized = false
+
+// Initialize database schema if needed
+export async function initializeDatabase() {
+  if (isInitialized) return
+  isInitialized = true
+  
+  const supabase = await getSupabaseClient()
+  
+  // Check if tables exist by querying them
+  const { error: usersError } = await supabase.from('users').select('count', { count: 'exact', head: true })
+  
+  if (usersError && usersError.code === 'PGRST116') {
+    // Table doesn't exist, create initial data
+    const now = new Date().toISOString()
+    const passwordHash = await hashPassword('password123')
+    const userId = id('u')
+    
+    await supabase.from('users').insert({
+      id: userId,
+      name: 'Test User',
+      email: 'testuser@example.com',
+      role: 'Landlord',
+      location: 'Zambia',
+      phone: '+260000000000',
+      company: 'Pamodzi',
+      initials: initials('Test User'),
+      password_hash: passwordHash,
+      created_at: now,
+      updated_at: now,
+    })
+  }
 }
 
-let writeQueue = Promise.resolve()
-
 export async function getUserByEmail(email: string) {
-  const db = await readDb()
-  return db.users.find(user => user.email.toLowerCase() === email.toLowerCase()) ?? null
+  const supabase = await getSupabaseClient()
+  
+  const { data: users, error } = await supabase
+    .from('users')
+    .select('*')
+    .ilike('email', email)
+    .limit(1)
+    .single()
+  
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching user by email:', error)
+    return null
+  }
+  
+  return users as StoredUser | null
 }
 
 export async function getUserById(userId: string) {
-  const db = await readDb()
-  return publicUser(db.users.find(user => user.id === userId) ?? null)
+  const supabase = await getSupabaseClient()
+  
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', userId)
+    .limit(1)
+    .single()
+  
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching user by ID:', error)
+  }
+  
+  return publicUser(user as StoredUser | null)
 }
 
 export async function authenticate(email: string, password: string) {
@@ -55,320 +91,353 @@ export async function authenticate(email: string, password: string) {
 }
 
 export async function createAccount(input: { name: string; company: string; phone: string; email: string; password: string }) {
+  const supabase = await getSupabaseClient()
   const passwordHash = await hashPassword(input.password)
   const now = new Date().toISOString()
   const userId = id('u')
 
-  return updateDb(async db => {
-    if (db.users.some(user => user.email.toLowerCase() === input.email.toLowerCase())) {
-      return { ok: false as const, message: 'An account already exists for this email address.' }
-    }
+  // Check if email already exists
+  const existingUser = await getUserByEmail(input.email)
+  if (existingUser) {
+    return { ok: false as const, message: 'An account already exists for this email address.' }
+  }
 
-    const user: StoredUser = {
-      id: userId,
-      name: input.name,
-      email: input.email,
-      role: 'Landlord',
-      location: 'Zambia',
-      phone: input.phone,
-      company: input.company,
-      initials: initials(input.name),
-      passwordHash,
-      createdAt: now,
-      updatedAt: now,
-    }
+  const { data, error } = await supabase.from('users').insert({
+    id: userId,
+    name: input.name,
+    email: input.email,
+    role: 'Landlord',
+    location: 'Zambia',
+    phone: input.phone,
+    company: input.company,
+    initials: initials(input.name),
+    password_hash: passwordHash,
+    created_at: now,
+    updated_at: now,
+  }).select().single()
 
-    db.users.push(user)
-    // Do not seed demo data for new accounts. Start with an empty workspace.
-    return { ok: true as const, user: publicUser(user)! }
-  })
+  if (error) {
+    console.error('Error creating account:', error)
+    return { ok: false as const, message: 'Failed to create account. Please try again.' }
+  }
+
+  return { ok: true as const, user: publicUser(data as StoredUser)! }
 }
 
 export async function getAppData(userId: string) {
-  const db = await readDb()
-  const user = publicUser(db.users.find(item => item.id === userId) ?? null)
+  const supabase = await getSupabaseClient()
+  
+  const user = await getUserById(userId)
   if (!user) return null
+
+  const [
+    { data: properties },
+    { data: tenants },
+    { data: payments },
+    { data: issues },
+    { data: notifications },
+    { data: activity },
+    { data: revenueData },
+  ] = await Promise.all([
+    supabase.from('properties').select('*').eq('owner_id', userId),
+    supabase.from('tenants').select('*').eq('owner_id', userId),
+    supabase.from('payments').select('*').eq('owner_id', userId),
+    supabase.from('issues').select('*').eq('owner_id', userId),
+    supabase.from('notifications').select('*').eq('owner_id', userId),
+    supabase.from('activity').select('*').eq('owner_id', userId),
+    supabase.from('revenue_data').select('*').eq('owner_id', userId),
+  ])
 
   return {
     user,
-    properties: stripOwner(db.properties.filter(item => item.ownerId === userId)),
-    tenants: stripOwner(db.tenants.filter(item => item.ownerId === userId)),
-    payments: stripOwner(db.payments.filter(item => item.ownerId === userId)),
-    issues: stripOwner(db.issues.filter(item => item.ownerId === userId)),
-    notifications: stripOwner(db.notifications.filter(item => item.ownerId === userId)),
-    activity: stripOwner(db.activity.filter(item => item.ownerId === userId)),
-    revenueData: stripOwner(db.revenueData.filter(item => item.ownerId === userId)).map(({ id: _id, ...point }) => point),
+    properties: stripOwner(properties || []),
+    tenants: stripOwner(tenants || []),
+    payments: stripOwner(payments || []),
+    issues: stripOwner(issues || []),
+    notifications: stripOwner(notifications || []),
+    activity: stripOwner(activity || []),
+    revenueData: stripOwner(revenueData || []).map(({ id: _id, ...point }: any) => point),
   }
 }
 
 export async function addProperty(userId: string, input: Omit<Property, 'id'>) {
-  return updateDb(db => {
-    const item = own({ id: id('p'), ...input }, userId)
-    try { console.info(`addProperty owner=${userId} id=${item.id}`) } catch {}
-    db.properties.unshift(item)
-    return stripOne(item)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+  const propertyId = id('p')
+
+  const { data, error } = await supabase.from('properties').insert({
+    id: propertyId,
+    owner_id: userId,
+    ...input,
+    created_at: now,
+    updated_at: now,
+  }).select().single()
+
+  if (error) {
+    console.error('Error adding property:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Property>)
 }
 
 export async function addTenant(userId: string, input: Omit<Tenant, 'id'>) {
-  return updateDb(db => {
-    const item = own({ id: id('t'), ...input }, userId)
-    db.tenants.unshift(item)
-    return stripOne(item)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+  const tenantId = id('t')
+
+  const { data, error } = await supabase.from('tenants').insert({
+    id: tenantId,
+    owner_id: userId,
+    ...input,
+    created_at: now,
+    updated_at: now,
+  }).select().single()
+
+  if (error) {
+    console.error('Error adding tenant:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Tenant>)
 }
 
 export async function addPayment(userId: string, input: Omit<Payment, 'id'>) {
-  return updateDb(db => {
-    const item = own({ id: id('pay'), ...input }, userId)
-    db.payments.unshift(item)
-    return stripOne(item)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+  const paymentId = id('pay')
+
+  const { data, error } = await supabase.from('payments').insert({
+    id: paymentId,
+    owner_id: userId,
+    ...input,
+    created_at: now,
+    updated_at: now,
+  }).select().single()
+
+  if (error) {
+    console.error('Error adding payment:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Payment>)
 }
 
 export async function confirmPayment(userId: string, paymentId: string) {
-  return updateDb(db => {
-    const payment = db.payments.find(item => item.ownerId === userId && item.id === paymentId)
-    if (!payment) return null
-    payment.status = 'paid'
-    payment.date = 'Today'
-    payment.updatedAt = new Date().toISOString()
-    return stripOne(payment)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from('payments')
+    .update({ status: 'paid', date: 'Today', updated_at: now })
+    .eq('id', paymentId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error confirming payment:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Payment>)
 }
 
 export async function updateProperty(userId: string, propertyId: string, updates: Partial<Property>) {
-  return updateDb(db => {
-    try { console.info(`updateProperty requested owner=${userId} id=${propertyId}`) } catch {}
-    const prop = db.properties.find(item => item.ownerId === userId && item.id === propertyId)
-    try { console.info('existing property ids=', db.properties.map(p=>p.id).join(',')) } catch {}
-    if (!prop) return null
-    Object.assign(prop, updates, { updatedAt: new Date().toISOString() })
-    return stripOne(prop)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from('properties')
+    .update({ ...updates, updated_at: now })
+    .eq('id', propertyId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating property:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Property>)
 }
 
 export async function deleteProperty(userId: string, propertyId: string) {
-  return updateDb(db => {
-    try { console.info(`deleteProperty requested owner=${userId} id=${propertyId}`) } catch {}
-    const idx = db.properties.findIndex(item => item.ownerId === userId && item.id === propertyId)
-    if (idx === -1) return null
-    const [removed] = db.properties.splice(idx, 1)
-    return stripOne(removed)
-  })
+  const supabase = await getSupabaseClient()
+
+  const { data, error } = await supabase
+    .from('properties')
+    .delete()
+    .eq('id', propertyId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error deleting property:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Property>)
 }
 
 export async function addIssue(userId: string, input: Omit<MaintenanceIssue, 'id'>) {
-  return updateDb(db => {
-    const item = own({ id: id('i'), ...input }, userId)
-    db.issues.unshift(item)
-    return stripOne(item)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+  const issueId = id('i')
+
+  const { data, error } = await supabase.from('issues').insert({
+    id: issueId,
+    owner_id: userId,
+    ...input,
+    created_at: now,
+    updated_at: now,
+  }).select().single()
+
+  if (error) {
+    console.error('Error adding issue:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<MaintenanceIssue>)
 }
 
 export async function updateIssue(userId: string, issueId: string, updates: Partial<MaintenanceIssue>) {
-  return updateDb(db => {
-    const issue = db.issues.find(item => item.ownerId === userId && item.id === issueId)
-    if (!issue) return null
-    Object.assign(issue, updates, { updatedAt: new Date().toISOString() })
-    return stripOne(issue)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from('issues')
+    .update({ ...updates, updated_at: now })
+    .eq('id', issueId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating issue:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<MaintenanceIssue>)
 }
 
 export async function updateTenant(userId: string, tenantId: string, updates: Partial<Tenant>) {
-  return updateDb(db => {
-    const tenant = db.tenants.find(item => item.ownerId === userId && item.id === tenantId)
-    if (!tenant) return null
-    Object.assign(tenant, updates, { updatedAt: new Date().toISOString() })
-    return stripOne(tenant)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from('tenants')
+    .update({ ...updates, updated_at: now })
+    .eq('id', tenantId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating tenant:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Tenant>)
 }
 
 export async function deleteTenant(userId: string, tenantId: string) {
-  return updateDb(db => {
-    const idx = db.tenants.findIndex(item => item.ownerId === userId && item.id === tenantId)
-    if (idx === -1) return null
-    const [removed] = db.tenants.splice(idx, 1)
-    return stripOne(removed)
-  })
+  const supabase = await getSupabaseClient()
+
+  const { data, error } = await supabase
+    .from('tenants')
+    .delete()
+    .eq('id', tenantId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error deleting tenant:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Tenant>)
 }
 
 export async function deletePayment(userId: string, paymentId: string) {
-  return updateDb(db => {
-    const idx = db.payments.findIndex(item => item.ownerId === userId && item.id === paymentId)
-    if (idx === -1) return null
-    const [removed] = db.payments.splice(idx, 1)
-    return stripOne(removed)
-  })
+  const supabase = await getSupabaseClient()
+
+  const { data, error } = await supabase
+    .from('payments')
+    .delete()
+    .eq('id', paymentId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error deleting payment:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Payment>)
 }
 
 export async function verifyUserPassword(userId: string, password: string) {
-  const db = await readDb()
-  const user = db.users.find(u => u.id === userId)
+  const user = await getUserById(userId)
   if (!user) return false
-  return verifyPassword(password, user.passwordHash)
+  
+  const supabase = await getSupabaseClient()
+  const { data: storedUser, error } = await supabase
+    .from('users')
+    .select('password_hash')
+    .eq('id', userId)
+    .single()
+
+  if (error || !storedUser) return false
+  return verifyPassword(password, storedUser.password_hash)
 }
 
 export async function markNotificationRead(userId: string, notificationId: string) {
-  return updateDb(db => {
-    const notification = db.notifications.find(item => item.ownerId === userId && item.id === notificationId)
-    if (!notification) return null
-    notification.read = true
-    notification.updatedAt = new Date().toISOString()
-    return stripOne(notification)
-  })
+  const supabase = await getSupabaseClient()
+  const now = new Date().toISOString()
+
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read: true, updated_at: now })
+    .eq('id', notificationId)
+    .eq('owner_id', userId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error marking notification as read:', error)
+    return null
+  }
+
+  return stripOne(data as Owned<Notification>)
 }
 
 export async function markAllNotificationsRead(userId: string) {
-  return updateDb(db => {
-    const now = new Date().toISOString()
-    db.notifications.forEach(notification => {
-      if (notification.ownerId === userId) {
-        notification.read = true
-        notification.updatedAt = now
-      }
-    })
-    return stripOwner(db.notifications.filter(item => item.ownerId === userId))
-  })
-}
-
-async function readDb(): Promise<AppDb> {
-  const filePath = getDataFilePath()
-  try {
-    return JSON.parse(await fs.readFile(filePath, 'utf8')) as AppDb
-  } catch (error) {
-    // If file not found, create initial DB
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      const db = await createInitialDb()
-      await writeDb(db)
-      return db
-    }
-
-    // If file exists but is invalid/corrupt, attempt to recover from latest backup
-    try {
-      const dir = path.dirname(filePath)
-      const base = path.basename(filePath)
-      const files = await fs.readdir(dir)
-      const backups = files
-        .filter(f => f.startsWith(base + '.bak.'))
-        .map(f => ({ f, m: 0 }))
-
-      if (backups.length) {
-        // pick the most recent backup by timestamp suffix
-        backups.sort((a, b) => (a.f < b.f ? 1 : -1))
-        const latest = backups[0].f
-        const backupPath = path.join(dir, latest)
-        const data = await fs.readFile(backupPath, 'utf8')
-        const db = JSON.parse(data) as AppDb
-        // restore backup to primary path
-        await fs.writeFile(filePath, JSON.stringify(db, null, 2), 'utf8')
-        return db
-      }
-    } catch (recoveryErr) {
-      // fall through to throwing original error
-      // eslint-disable-next-line no-console
-      console.error('Failed to recover DB from backup:', recoveryErr)
-    }
-
-    throw error
-  }
-}
-
-async function updateDb<T>(mutate: (db: AppDb) => T | Promise<T>) {
-  const run = writeQueue.then(async () => {
-    const db = await readDb()
-    const result = await mutate(db)
-    await writeDb(db)
-    return result
-  })
-
-  writeQueue = run.then(() => undefined, () => undefined)
-  return run
-}
-
-async function writeDb(db: AppDb) {
-  const filePath = getDataFilePath()
-  const dir = path.dirname(filePath)
-  await fs.mkdir(dir, { recursive: true })
-
-  const data = JSON.stringify(db, null, 2)
-  const tmpPath = filePath + '.tmp'
-
-  // If an existing file exists, rotate it to a timestamped backup before writing
-  try {
-    const stat = await fs.stat(filePath).catch(() => null)
-    if (stat) {
-      const bakName = `${path.basename(filePath)}.bak.${Date.now()}`
-      const bakPath = path.join(dir, bakName)
-      await fs.copyFile(filePath, bakPath)
-
-      // keep only the last 5 backups
-      const files = await fs.readdir(dir)
-      const backups = files.filter(f => f.startsWith(path.basename(filePath) + '.bak.'))
-      if (backups.length > 5) {
-        backups.sort()
-        const toRemove = backups.slice(0, backups.length - 5)
-        await Promise.all(toRemove.map(f => fs.unlink(path.join(dir, f)).catch(() => undefined)))
-      }
-    }
-  } catch (err) {
-    // best-effort: do not fail writes because backup rotation failed
-    // eslint-disable-next-line no-console
-    console.error('DB backup rotation failed', err)
-  }
-
-  // atomic write: write to tmp file then rename
-  await fs.writeFile(tmpPath, data, 'utf8')
-  await fs.rename(tmpPath, filePath)
-}
-
-async function createInitialDb(): Promise<AppDb> {
+  const supabase = await getSupabaseClient()
   const now = new Date().toISOString()
-  const passwordHash = await hashPassword('password123')
-  const userId = id('u')
 
-  const db: AppDb = {
-    version: 1,
-    users: [
-      {
-        id: userId,
-        name: 'Test User',
-        email: 'testuser@example.com',
-        role: 'Landlord',
-        location: 'Zambia',
-        phone: '+260000000000',
-        company: 'Pamodzi',
-        initials: initials('Test User'),
-        passwordHash,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    properties: [],
-    tenants: [],
-    payments: [],
-    issues: [],
-    notifications: [],
-    activity: [],
-    revenueData: [],
+  const { data, error } = await supabase
+    .from('notifications')
+    .update({ read: true, updated_at: now })
+    .eq('owner_id', userId)
+    .select()
+
+  if (error) {
+    console.error('Error marking all notifications as read:', error)
+    return []
   }
 
-  return db
-}
-
-function seedWorkspace(db: AppDb, ownerId: string) {
-  // Intentionally left empty. Demo/sample data should not be seeded automatically.
-}
-
-function own<T extends { id: string }>(item: T, ownerId: string): Owned<T> {
-  const now = new Date().toISOString()
-  return { ...item, ownerId, createdAt: now, updatedAt: now }
+  return stripOwner(data || [])
 }
 
 function publicUser(user: StoredUser | null): User | null {
   if (!user) return null
-  const { passwordHash: _passwordHash, createdAt: _createdAt, updatedAt: _updatedAt, ...safeUser } = user
-  return safeUser
+  const { password_hash: _passwordHash, passwordHash: _old, created_at: _createdAt, updated_at: _updatedAt, createdAt: _old2, updatedAt: _old3, ...safeUser } = user as any
+  return safeUser as User
 }
 
 function stripOwner<T>(items: Owned<T>[]) {
@@ -376,7 +445,7 @@ function stripOwner<T>(items: Owned<T>[]) {
 }
 
 function stripOne<T>(item: Owned<T>): T {
-  const { ownerId: _ownerId, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = item
+  const { owner_id: _ownerId, ownerId: _ownerId2, created_at: _createdAt, updated_at: _updatedAt, createdAt: _old, updatedAt: _old2, ...rest } = item as any
   return rest as T
 }
 
@@ -387,4 +456,3 @@ function id(prefix: string) {
 function initials(name: string) {
   return name.split(/\s+/).map(part => part[0]).join('').toUpperCase().slice(0, 2)
 }
-
