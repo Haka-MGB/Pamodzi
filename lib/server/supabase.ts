@@ -13,3 +13,8 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: false
   }
 })
+
+// Export function for consistency with db.ts imports
+export async function getSupabaseClient() {
+  return supabase
+}
