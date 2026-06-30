@@ -7,11 +7,11 @@ import Modal from '@/components/ui/Modal'
 import { UserPlus, Search, ChevronRight, Mail, Phone, Send } from 'lucide-react'
 
 export default function TenantsPage() {
-  const { tenants, payments, addTenant, updateTenant, deleteTenant, showToast } = useApp()
+  const { tenants, payments, properties, addTenant, updateTenant, deleteTenant, showToast } = useApp()
   const [search,   setSearch]   = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [addOpen,  setAddOpen]  = useState(false)
-  const [form, setForm] = useState({ name:'', unit:'', propertyId:'p1', propertyName:'Parklands Estate', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+  const [form, setForm] = useState({ name:'', unit:'', propertyId:'', propertyName:'', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ name:'', unit:'', rent:'', email:'', phone:'', leaseEnd:'' })
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -29,17 +29,26 @@ export default function TenantsPage() {
 
   async function handleAdd() {
     if (!form.name || !form.unit || !form.rent) { showToast('error', 'Name, unit and rent are required'); return }
+    if (!form.propertyId) { showToast('error', 'Please select a property'); return }
     if (!window.confirm(`Save ${form.name} as a new tenant?`)) return
+    
+    // Get current date for lease dates
+    const today = new Date()
+    const defaultLeaseStart = form.leaseStart || today.toISOString().split('T')[0]
+    const oneYearLater = new Date(today)
+    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1)
+    const defaultLeaseEnd = form.leaseEnd || oneYearLater.toISOString().split('T')[0]
+    
     try {
       await addTenant({
         name: form.name, initials: form.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2),
         unit: form.unit, propertyId: form.propertyId, propertyName: form.propertyName,
-        rent: Number(form.rent), leaseStart: form.leaseStart || 'May 2026', leaseEnd: form.leaseEnd || 'Apr 2027',
+        rent: Number(form.rent), leaseStart: defaultLeaseStart, leaseEnd: defaultLeaseEnd,
         status: 'active', email: form.email, phone: form.phone,
       })
       showToast('success', `${form.name} added as a tenant.`)
       setAddOpen(false)
-      setForm({ name:'', unit:'', propertyId:'p1', propertyName:'Parklands Estate', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+      setForm({ name:'', unit:'', propertyId:'', propertyName:'', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Unable to save tenant.')
     }
@@ -48,18 +57,12 @@ export default function TenantsPage() {
   async function handleUpdateTenant(id: string) {
     if (!window.confirm(`Save changes for ${editForm.name}?`)) return
     try {
-      await updateTenant(id, { name: editForm.name.trim(), unit: editForm.unit.trim(), rent: Number(editForm.rent), email: editForm.email.trim(), phone: editForm.phone.trim(), leaseEnd: editForm.leaseEnd || 'Apr 2027' })
+      await updateTenant(id, { name: editForm.name.trim(), unit: editForm.unit.trim(), rent: Number(editForm.rent), email: editForm.email.trim(), phone: editForm.phone.trim(), leaseEnd: editForm.leaseEnd || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0] })
       showToast('success', `${editForm.name} updated.`)
       setEditOpen(false)
       setSelected(null)
     } catch (err) { showToast('error', err instanceof Error ? err.message : 'Unable to update tenant.') }
   }
-
-  const PROPERTIES = [
-    { id:'p1', name:'Parklands Estate' },
-    { id:'p2', name:'Ndola East Residences' },
-    { id:'p3', name:'Lusaka CBD Apartments' },
-  ]
 
   return (
     <div className="animate-fade-in">
@@ -171,22 +174,30 @@ export default function TenantsPage() {
 
       {/* Add Tenant Modal */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Tenant" size="lg"
-        footer={<><button className="btn" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={handleAdd}>Add tenant</button></>}>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="field col-span-2"><label className="field-label">Full name *</label><input className="field-input" placeholder="e.g. Jane Smith" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} /></div>
-          <div className="field">
-            <label className="field-label">Property *</label>
-            <select className="field-select" value={form.propertyId} onChange={e => { const p=PROPERTIES.find(x=>x.id===e.target.value)!; setForm(f=>({...f,propertyId:e.target.value,propertyName:p.name})) }}>
-              {PROPERTIES.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+        footer={<><button className="btn" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={handleAdd} disabled={properties.length === 0}>Add tenant</button></>}>
+        {properties.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>You need to add at least one property before adding tenants.</p>
+            <button className="btn-primary btn" onClick={() => { setAddOpen(false); window.location.href = '/properties' }}>Go to Properties</button>
           </div>
-          <div className="field"><label className="field-label">Unit *</label><input className="field-input" placeholder="e.g. B3" value={form.unit} onChange={e => setForm(f=>({...f,unit:e.target.value}))} /></div>
-          <div className="field"><label className="field-label">Monthly rent (ZMW) *</label><input type="number" className="field-input" placeholder="2000" value={form.rent} onChange={e => setForm(f=>({...f,rent:e.target.value}))} /></div>
-          <div className="field"><label className="field-label">Phone</label><input className="field-input" placeholder="0977 000 000" value={form.phone} onChange={e => setForm(f=>({...f,phone:e.target.value}))} /></div>
-          <div className="field col-span-2"><label className="field-label">Email</label><input type="email" className="field-input" placeholder="tenant@example.com" value={form.email} onChange={e => setForm(f=>({...f,email:e.target.value}))} /></div>
-          <div className="field"><label className="field-label">Lease start</label><input type="date" className="field-input" value={form.leaseStart} onChange={e => setForm(f=>({...f,leaseStart:e.target.value}))} /></div>
-          <div className="field"><label className="field-label">Lease end</label><input type="date" className="field-input" value={form.leaseEnd} onChange={e => setForm(f=>({...f,leaseEnd:e.target.value}))} /></div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="field col-span-2"><label className="field-label">Full name *</label><input className="field-input" placeholder="e.g. Jane Smith" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} /></div>
+            <div className="field">
+              <label className="field-label">Property *</label>
+              <select className="field-select" value={form.propertyId} onChange={e => { const p=properties.find(x=>x.id===e.target.value); if(p) setForm(f=>({...f,propertyId:e.target.value,propertyName:p.name})) }}>
+                <option value="">Select property...</option>
+                {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="field"><label className="field-label">Unit *</label><input className="field-input" placeholder="e.g. B3" value={form.unit} onChange={e => setForm(f=>({...f,unit:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Monthly rent (ZMW) *</label><input type="number" className="field-input" placeholder="2000" value={form.rent} onChange={e => setForm(f=>({...f,rent:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Phone</label><input className="field-input" placeholder="0977 000 000" value={form.phone} onChange={e => setForm(f=>({...f,phone:e.target.value}))} /></div>
+            <div className="field col-span-2"><label className="field-label">Email</label><input type="email" className="field-input" placeholder="tenant@example.com" value={form.email} onChange={e => setForm(f=>({...f,email:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Lease start</label><input type="date" className="field-input" value={form.leaseStart} onChange={e => setForm(f=>({...f,leaseStart:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Lease end</label><input type="date" className="field-input" value={form.leaseEnd} onChange={e => setForm(f=>({...f,leaseEnd:e.target.value}))} /></div>
+          </div>
+        )}
       </Modal>
 
       <Modal open={deleteConfirmOpen} onClose={() => { setDeleteConfirmOpen(false); setDeletingId(null); setDeletePassword('') }} title="Confirm delete" size="sm"

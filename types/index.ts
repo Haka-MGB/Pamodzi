@@ -89,9 +89,7 @@ export interface ActivityItem {
 
 export interface RevenueDataPoint {
   month: string
-  parklands: number
-  ndola: number
-  cbd: number
+  [key: string]: number | string  // Allow dynamic property IDs
   total: number
 }
 

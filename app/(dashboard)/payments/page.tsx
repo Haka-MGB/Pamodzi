@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useRouter } from 'next/navigation'
 import { useApp } from '@/context/AppContext'
 import { downloadExcelFile, downloadPdfFile, downloadTextFile, fmtK } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
@@ -8,6 +9,7 @@ import StatCard from '@/components/ui/StatCard'
 import { Download, Plus, Search, CheckCircle, Clock, AlertTriangle, ChevronDown } from 'lucide-react'
 
 export default function PaymentsPage() {
+  const router = useRouter()
   const { payments, tenants, confirmPayment, addPayment, deletePayment, showToast } = useApp()
   const [search,       setSearch]       = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -16,7 +18,20 @@ export default function PaymentsPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
-  const [form, setForm] = useState({ tenantId: '', tenantName: '', method: 'Airtel Money', ref: '', date: '', period: 'May 2026' })
+  
+  // Get current month and year for default period
+  const now = new Date()
+  const currentMonth = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const currentDate = now.toISOString().split('T')[0] // YYYY-MM-DD format
+  
+  const [form, setForm] = useState({ 
+    tenantId: '', 
+    tenantName: '', 
+    method: 'Airtel Money', 
+    ref: '', 
+    date: currentDate, 
+    period: currentMonth 
+  })
   const [tenantPickerOpen, setTenantPickerOpen] = useState(false)
   const [activeTenantIndex, setActiveTenantIndex] = useState(0)
   const tenantPickerRef = useRef<HTMLDivElement>(null)
@@ -183,7 +198,14 @@ export default function PaymentsPage() {
       })
       showToast('success', 'Payment recorded successfully.')
       closeAddPaymentModal()
-      setForm({ tenantId: '', tenantName: '', method: 'Airtel Money', ref: '', date: '', period: 'May 2026' })
+      setForm({ 
+        tenantId: '', 
+        tenantName: '', 
+        method: 'Airtel Money', 
+        ref: '', 
+        date: currentDate, 
+        period: currentMonth 
+      })
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Unable to save payment.')
     }
@@ -195,7 +217,7 @@ export default function PaymentsPage() {
       <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>Payments</h1>
-          <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>Track, confirm & export transactions · April 2026</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>Track, confirm & export transactions · {currentMonth}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button className="btn" onClick={exportPaymentsExcel}><Download size={13} /> Excel</button>
@@ -206,9 +228,25 @@ export default function PaymentsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <StatCard icon={<CheckCircle size={18} />} value={fmtK(totalCollected)} label={`Collected · ${paid.length} payments`} trend="8% vs March" trendUp />
-        <StatCard icon={<Clock size={18} />} value={String(pending.length)} label="Awaiting confirmation" accentColor="#D9A13B" />
-        <StatCard icon={<AlertTriangle size={18} />} value={String(overdue.length)} label="Overdue · Action needed" accentColor="#C35D3A" />
+        <StatCard 
+          icon={<CheckCircle size={18} />} 
+          value={fmtK(totalCollected)} 
+          label={`Collected · ${paid.length} payment${paid.length !== 1 ? 's' : ''}`} 
+          trend={paid.length > 0 ? currentMonth : undefined}
+          trendUp 
+        />
+        <StatCard 
+          icon={<Clock size={18} />} 
+          value={String(pending.length)} 
+          label="Awaiting confirmation" 
+          accentColor="#D9A13B" 
+        />
+        <StatCard 
+          icon={<AlertTriangle size={18} />} 
+          value={String(overdue.length)} 
+          label="Overdue · Action needed" 
+          accentColor="#C35D3A" 
+        />
       </div>
 
       {/* Table */}
@@ -315,7 +353,15 @@ export default function PaymentsPage() {
       {/* Add Payment Modal */}
       <Modal open={addOpen} onClose={closeAddPaymentModal} title="Record Payment"
         footer={<><button className="btn" onClick={closeAddPaymentModal}>Cancel</button><button className="btn-primary btn" onClick={handleAdd}>Save payment</button></>}>
-        <div className="space-y-4">
+        {tenants.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>You need to add at least one tenant first.</p>
+            <button className="btn-primary btn mt-3" onClick={() => { closeAddPaymentModal(); router.push('/tenants') }}>
+              Go to Tenants
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
           <div className="field">
             <label className="field-label">Tenant *</label>
             <div ref={tenantPickerRef} className="relative">
@@ -405,6 +451,7 @@ export default function PaymentsPage() {
             <input type="date" className="field-input" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
           </div>
         </div>
+        )}
       </Modal>
     </div>
   )

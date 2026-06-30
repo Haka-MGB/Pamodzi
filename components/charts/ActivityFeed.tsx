@@ -1,6 +1,6 @@
 'use client'
 import { useApp } from '@/context/AppContext'
-import { CheckCircle, AlertTriangle, Wrench, Clock } from 'lucide-react'
+import { CheckCircle, AlertTriangle, Wrench, Clock, Activity } from 'lucide-react'
 
 const ICONS: Record<string, React.ElementType> = {
   'check-circle': CheckCircle,
@@ -17,6 +17,21 @@ const COLORS: Record<string, string> = {
 
 export default function ActivityFeed() {
   const { activity } = useApp()
+  
+  if (activity.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center px-5">
+        <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3" style={{ background: 'var(--bg-page)' }}>
+          <Activity size={24} style={{ color: 'var(--text-muted)' }} />
+        </div>
+        <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>No activity yet</p>
+        <p className="text-xs max-w-xs" style={{ color: 'var(--text-muted)' }}>
+          Your recent actions and updates will appear here.
+        </p>
+      </div>
+    )
+  }
+  
   return (
     <div className="scroll-panel">
       {activity.map(a => {

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import {
   LineChart,
   Line,
@@ -14,13 +15,21 @@ import {
 interface RevenueChartProps {
   data: Array<{
     month: string
-    parklands?: number
-    ndola?: number
-    cbd?: number
+    [key: string]: number | string
   }>
+  properties?: Array<{ id: string; name: string }>
 }
 
-export default function RevenueChart({ data }: RevenueChartProps) {
+export default function RevenueChart({ data, properties = [] }: RevenueChartProps) {
+  // Extract dynamic property keys from data (excluding 'month' and 'total')
+  const propertyKeys = useMemo(() => {
+    if (!data || data.length === 0) return []
+    const firstPoint = data[0]
+    return Object.keys(firstPoint).filter(key => key !== 'month' && key !== 'total')
+  }, [data])
+
+  const colors = ['#2D6A4F', '#D9A13B', '#4A90D9', '#C35D3A', '#8F9A8E']
+
   return (
     <ResponsiveContainer width="100%" height={260}>
       <LineChart data={data}>
@@ -42,9 +51,9 @@ export default function RevenueChart({ data }: RevenueChartProps) {
         <Tooltip
           formatter={(value) => {
             if (typeof value === 'number') {
-              return [`K ${value.toLocaleString()}`, 'Revenue']
+              return [`K ${value.toLocaleString()}`, '']
             }
-            return [String(value ?? ''), 'Revenue']
+            return [String(value ?? ''), '']
           }}
           contentStyle={{
             background: 'var(--bg-surface)',
@@ -55,30 +64,31 @@ export default function RevenueChart({ data }: RevenueChartProps) {
           cursor={{ fill: 'rgba(45,106,79,0.06)' }}
         />
         <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Line
-          type="monotone"
-          dataKey="parklands"
-          name="Parklands Estate"
-          stroke="#2D6A4F"
-          strokeWidth={2}
-          dot={{ r: 3 }}
-        />
-        <Line
-          type="monotone"
-          dataKey="ndola"
-          name="Ndola East"
-          stroke="#D9A13B"
-          strokeWidth={2}
-          dot={{ r: 3 }}
-        />
-        <Line
-          type="monotone"
-          dataKey="cbd"
-          name="Lusaka CBD Apartments"
-          stroke="#4A90D9"
-          strokeWidth={2}
-          dot={{ r: 3 }}
-        />
+        {propertyKeys.length > 0 ? (
+          propertyKeys.map((key, index) => {
+            const property = properties.find(p => p.id === key)
+            return (
+              <Line
+                key={key}
+                type="monotone"
+                dataKey={key}
+                name={property?.name || key}
+                stroke={colors[index % colors.length]}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+              />
+            )
+          })
+        ) : (
+          <Line
+            type="monotone"
+            dataKey="total"
+            name="Total Revenue"
+            stroke="#2D6A4F"
+            strokeWidth={2}
+            dot={{ r: 3 }}
+          />
+        )}
       </LineChart>
     </ResponsiveContainer>
   )

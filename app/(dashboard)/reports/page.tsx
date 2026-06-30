@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { useApp } from '@/context/AppContext'
 import { downloadExcelFile, downloadPdfFile, fmtK } from '@/lib/utils'
 import {
@@ -11,11 +12,30 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts'
-import { FileDown, FileText, Clock, AlertCircle, Wrench } from 'lucide-react'
+import { FileDown, FileText, Clock, AlertCircle, Wrench, Plus } from 'lucide-react'
 
 export default function ReportsPage() {
-  const { revenueData, payments, showToast } = useApp()
+  const { revenueData, payments, properties, showToast } = useApp()
+  const [revenuePeriod, setRevenuePeriod] = useState('')
   const totalCollected = payments.filter((p) => p.status === 'paid').reduce((s, p) => s + p.amount, 0)
+  
+  // Get current month and year
+  const now = new Date()
+  const currentMonth = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  
+  // Get the period value - parse from formatted string or use all data if empty
+  const getPeriodMonths = (value: string): number | null => {
+    if (!value) return null // Show all data
+    const match = value.match(/\d+/)
+    if (match) return parseInt(match[0])
+    if (!isNaN(Number(value))) return parseInt(value)
+    return null
+  }
+  
+  const effectiveMonths = getPeriodMonths(revenuePeriod)
+  
+  // Filter revenue data based on selected period
+  const filteredRevenueData = effectiveMonths ? revenueData.slice(-effectiveMonths) : revenueData
 
   function downloadSummaryReport() {
     const paid = payments.filter((p) => p.status === 'paid')
@@ -64,7 +84,7 @@ export default function ReportsPage() {
   const QUICK_EXPORTS = [
     {
       icon: FileText,
-      label: 'Rent roll · April 2026',
+      label: `Rent roll · ${currentMonth}`,
       sub: 'All tenants, amounts & payment status',
       color: 'var(--accent-primary)',
     },
@@ -123,16 +143,19 @@ export default function ReportsPage() {
             <div className="field">
               <label className="field-label">Period</label>
               <select className="field-select">
-                {['April 2026', 'March 2026', 'Q1 2026 (Jan–Mar)', 'Q4 2025', 'Full year 2025'].map((o) => (
-                  <option key={o}>{o}</option>
-                ))}
+                <option>{currentMonth}</option>
+                <option>{new Date(now.getFullYear(), now.getMonth() - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</option>
+                <option>{new Date(now.getFullYear(), now.getMonth() - 2, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</option>
+                <option>Q{Math.ceil((now.getMonth() + 1) / 3)} {now.getFullYear()}</option>
+                <option>Full year {now.getFullYear()}</option>
               </select>
             </div>
             <div className="field">
               <label className="field-label">Property</label>
               <select className="field-select">
-                {['All properties', 'Parklands Estate', 'Ndola East Residences', 'Lusaka CBD Apartments'].map((o) => (
-                  <option key={o}>{o}</option>
+                <option>All properties</option>
+                {properties.map((p) => (
+                  <option key={p.id}>{p.name}</option>
                 ))}
               </select>
             </div>
@@ -197,67 +220,93 @@ export default function ReportsPage() {
       {/* Revenue trend chart */}
       <div className="panel">
         <div className="panel-header">
-          <span className="panel-title">Revenue trend by property — 2026</span>
+          <span className="panel-title">Revenue trend</span>
+          <select 
+            className="field-select text-xs px-2 py-1"
+            style={{ width: 'auto', fontSize: '0.75rem' }}
+            value={revenuePeriod}
+            onChange={(e) => setRevenuePeriod(e.target.value)}
+          >
+            <option value="">All time</option>
+            <option value="last Month">last Month</option>
+            <option value="last 4 Months">last 4 Months</option>
+            <option value="last 6 Months">last 6 Months</option>
+            <option value="last 12 Months">last 12 Months</option>
+          </select>
         </div>
         <div className="p-3 sm:p-5">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={revenueData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
-              <XAxis
-                dataKey="month"
-                tick={{ fontSize: 11, fill: '#8F9A8E' }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tickFormatter={(value) => {
-                  const num = typeof value === 'number' ? value : 0
-                  return `K${num / 1000}k`
-                }}
-                tick={{ fontSize: 10, fill: '#8F9A8E' }}
-                axisLine={false}
-              />
-              <Tooltip
-                formatter={(value) => {
-                  if (typeof value === 'number') {
-                    return [`K ${value.toLocaleString()}`, '']
-                  }
-                  return [String(value ?? ''), '']
-                }}
-                contentStyle={{
-                  background: 'var(--bg-page)',
-                  borderColor: 'var(--border-light)',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line
-                type="monotone"
-                dataKey="parklands"
-                name="Parklands Estate"
-                stroke="#2D6A4F"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="ndola"
-                name="Ndola East"
-                stroke="#D9A13B"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="cbd"
-                name="Lusaka CBD Apartments"
-                stroke="#4A90D9"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {filteredRevenueData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--bg-page)' }}>
+                <FileText size={32} style={{ color: 'var(--text-muted)' }} />
+              </div>
+              <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>No revenue data yet</p>
+              <p className="text-xs max-w-xs" style={{ color: 'var(--text-muted)' }}>
+                Revenue trends will appear here once you start recording payments from your tenants.
+              </p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <LineChart data={filteredRevenueData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" />
+                <XAxis
+                  dataKey="month"
+                  tick={{ fontSize: 11, fill: '#8F9A8E' }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tickFormatter={(value) => {
+                    const num = typeof value === 'number' ? value : 0
+                    return `K${num / 1000}k`
+                  }}
+                  tick={{ fontSize: 10, fill: '#8F9A8E' }}
+                  axisLine={false}
+                />
+                <Tooltip
+                  formatter={(value) => {
+                    if (typeof value === 'number') {
+                      return [`K ${value.toLocaleString()}`, '']
+                    }
+                    return [String(value ?? ''), '']
+                  }}
+                  contentStyle={{
+                    background: 'var(--bg-page)',
+                    borderColor: 'var(--border-light)',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {properties.length > 0 ? (
+                  properties.slice(0, 5).map((prop, index) => {
+                    const colors = ['#2D6A4F', '#D9A13B', '#4A90D9', '#C35D3A', '#8F9A8E']
+                    const propKey = prop.id
+                    return (
+                      <Line
+                        key={propKey}
+                        type="monotone"
+                        dataKey={propKey}
+                        name={prop.name}
+                        stroke={colors[index % colors.length]}
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    )
+                  })
+                ) : (
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    name="Total Revenue"
+                    stroke="#2D6A4F"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
     </div>

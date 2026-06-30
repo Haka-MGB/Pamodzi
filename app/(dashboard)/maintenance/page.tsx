@@ -30,7 +30,18 @@ export default function MaintenancePage() {
   const urgentCount   = issues.filter(i => i.priority === 'urgent').length
   const highCount     = issues.filter(i => i.priority === 'high').length
   const inProgCount   = issues.filter(i => i.status   === 'in-progress').length
-  const resolvedMonth = 12
+  
+  // Calculate resolved issues this month
+  const now = new Date()
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const resolvedMonth = issues.filter(i => {
+    if (i.status !== 'resolved' || !i.date) return false
+    // If date is a relative string like "Just now", "4d", count it as this month
+    if (i.date.includes('ago') || i.date.includes('Just now') || i.date.match(/^\d+[dhm]$/)) return true
+    // Otherwise try to parse as date
+    const issueDate = new Date(i.date)
+    return issueDate >= currentMonthStart
+  }).length
 
   const updatingIssue = issues.find(i => i.id === updateId)
 
@@ -166,7 +177,15 @@ export default function MaintenancePage() {
       {/* Log Issue Modal */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Log Maintenance Issue" size="lg"
         footer={<><button className="btn" onClick={() => setAddOpen(false)}>Cancel</button><button className="btn-primary btn" onClick={handleAddIssue}>Log issue</button></>}>
-        <div className="space-y-4">
+        {tenants.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>You need to add at least one tenant first.</p>
+            <button className="btn-primary btn mt-3" onClick={() => { setAddOpen(false); }}>
+              Close
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
           <div className="field"><label className="field-label">Issue title *</label><input className="field-input" placeholder="e.g. Broken window in bedroom" value={form.title} onChange={e => setForm(f=>({...f,title:e.target.value}))} /></div>
           <div className="grid grid-cols-2 gap-3">
             <div className="field">
@@ -198,6 +217,7 @@ export default function MaintenancePage() {
           </div>
           <div className="field"><label className="field-label">Description</label><textarea className="field-textarea" placeholder="Describe the issue in detail…" value={form.description} onChange={e => setForm(f=>({...f,description:e.target.value}))} /></div>
         </div>
+        )}
       </Modal>
     </div>
   )
