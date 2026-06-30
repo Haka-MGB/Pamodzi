@@ -69,7 +69,6 @@ export async function createAccount(input: { name: string; company: string; phon
     }
 
     db.users.push(user)
-    // Do not seed demo data for new accounts. Start with an empty workspace.
     return { ok: true as const, user: publicUser(user)! }
   })
 }
@@ -94,7 +93,6 @@ export async function getAppData(userId: string) {
 export async function addProperty(userId: string, input: Omit<Property, 'id'>) {
   return updateDb(db => {
     const item = own({ id: id('p'), ...input }, userId)
-    try { console.info(`addProperty owner=${userId} id=${item.id}`) } catch {}
     db.properties.unshift(item)
     return stripOne(item)
   })
@@ -129,9 +127,7 @@ export async function confirmPayment(userId: string, paymentId: string) {
 
 export async function updateProperty(userId: string, propertyId: string, updates: Partial<Property>) {
   return updateDb(db => {
-    try { console.info(`updateProperty requested owner=${userId} id=${propertyId}`) } catch {}
     const prop = db.properties.find(item => item.ownerId === userId && item.id === propertyId)
-    try { console.info('existing property ids=', db.properties.map(p=>p.id).join(',')) } catch {}
     if (!prop) return null
     Object.assign(prop, updates, { updatedAt: new Date().toISOString() })
     return stripOne(prop)
@@ -140,7 +136,6 @@ export async function updateProperty(userId: string, propertyId: string, updates
 
 export async function deleteProperty(userId: string, propertyId: string) {
   return updateDb(db => {
-    try { console.info(`deleteProperty requested owner=${userId} id=${propertyId}`) } catch {}
     const idx = db.properties.findIndex(item => item.ownerId === userId && item.id === propertyId)
     if (idx === -1) return null
     const [removed] = db.properties.splice(idx, 1)
@@ -227,39 +222,28 @@ async function readDb(): Promise<AppDb> {
   try {
     return JSON.parse(await fs.readFile(filePath, 'utf8')) as AppDb
   } catch (error) {
-    // If file not found, create initial DB
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       const db = await createInitialDb()
       await writeDb(db)
       return db
     }
-
-    // If file exists but is invalid/corrupt, attempt to recover from latest backup
     try {
       const dir = path.dirname(filePath)
       const base = path.basename(filePath)
       const files = await fs.readdir(dir)
-      const backups = files
-        .filter(f => f.startsWith(base + '.bak.'))
-        .map(f => ({ f, m: 0 }))
-
+      const backups = files.filter(f => f.startsWith(base + '.bak.'))
       if (backups.length) {
-        // pick the most recent backup by timestamp suffix
-        backups.sort((a, b) => (a.f < b.f ? 1 : -1))
-        const latest = backups[0].f
+        backups.sort()
+        const latest = backups[backups.length - 1]
         const backupPath = path.join(dir, latest)
         const data = await fs.readFile(backupPath, 'utf8')
         const db = JSON.parse(data) as AppDb
-        // restore backup to primary path
         await fs.writeFile(filePath, JSON.stringify(db, null, 2), 'utf8')
         return db
       }
     } catch (recoveryErr) {
-      // fall through to throwing original error
-      // eslint-disable-next-line no-console
       console.error('Failed to recover DB from backup:', recoveryErr)
     }
-
     throw error
   }
 }
@@ -271,7 +255,6 @@ async function updateDb<T>(mutate: (db: AppDb) => T | Promise<T>) {
     await writeDb(db)
     return result
   })
-
   writeQueue = run.then(() => undefined, () => undefined)
   return run
 }
@@ -284,15 +267,12 @@ async function writeDb(db: AppDb) {
   const data = JSON.stringify(db, null, 2)
   const tmpPath = filePath + '.tmp'
 
-  // If an existing file exists, rotate it to a timestamped backup before writing
   try {
     const stat = await fs.stat(filePath).catch(() => null)
     if (stat) {
       const bakName = `${path.basename(filePath)}.bak.${Date.now()}`
       const bakPath = path.join(dir, bakName)
       await fs.copyFile(filePath, bakPath)
-
-      // keep only the last 5 backups
       const files = await fs.readdir(dir)
       const backups = files.filter(f => f.startsWith(path.basename(filePath) + '.bak.'))
       if (backups.length > 5) {
@@ -302,12 +282,9 @@ async function writeDb(db: AppDb) {
       }
     }
   } catch (err) {
-    // best-effort: do not fail writes because backup rotation failed
-    // eslint-disable-next-line no-console
     console.error('DB backup rotation failed', err)
   }
 
-  // atomic write: write to tmp file then rename
   await fs.writeFile(tmpPath, data, 'utf8')
   await fs.rename(tmpPath, filePath)
 }
@@ -317,7 +294,7 @@ async function createInitialDb(): Promise<AppDb> {
   const passwordHash = await hashPassword('password123')
   const userId = id('u')
 
-  const db: AppDb = {
+  return {
     version: 1,
     users: [
       {
@@ -342,8 +319,6 @@ async function createInitialDb(): Promise<AppDb> {
     activity: [],
     revenueData: [],
   }
-
-  return db
 }
 
 function own<T extends { id: string }>(item: T, ownerId: string): Owned<T> {
