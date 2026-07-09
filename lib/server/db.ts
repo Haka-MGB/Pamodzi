@@ -191,32 +191,21 @@ export async function initializeDatabase() {
   if (isInitialized) return
   isInitialized = true
 
+  // Database initialization removed for production security
+  // Users must register through the normal registration flow
   const supabase = await getSupabaseClient()
-  const { error: usersError } = await supabase.from('users').select('count', { count: 'exact', head: true })
-
-  if (usersError && usersError.code === 'PGRST116') {
-    const now = new Date().toISOString()
-    const passwordHash = await hashPassword('password123')
-    const userId = id('u')
-
-    await supabase.from('users').insert({
-      id: userId,
-      name: 'Test User',
-      email: 'testuser@example.com',
-      role: 'Landlord',
-      location: 'Zambia',
-      phone: '+260000000000',
-      company: 'Pamodzi',
-      initials: initials('Test User'),
-      password_hash: passwordHash,
-      created_at: now,
-      updated_at: now,
-    })
+  
+  // Verify database connection
+  const { error } = await supabase.from('users').select('count', { count: 'exact', head: true })
+  
+  if (error && error.code !== 'PGRST116') {
+    console.error('Database connection error:', error)
   }
 }
 
 export async function getUserByEmail(email: string) {
   const supabase = await getSupabaseClient()
+  
   const { data, error } = await supabase
     .from('users')
     .select('*')
@@ -224,10 +213,13 @@ export async function getUserByEmail(email: string) {
     .limit(1)
     .single()
 
-  if (error && error.code !== 'PGRST116') {
-    console.error('Error fetching user by email:', error)
+  if (error) {
+    if (error.code !== 'PGRST116') {
+      console.error('Error fetching user by email:', error)
+    }
     return null
   }
+  
   return data ? userFromDb(data) : null
 }
 
@@ -249,6 +241,7 @@ export async function getUserById(userId: string) {
 export async function authenticate(email: string, password: string) {
   const user = await getUserByEmail(email)
   if (!user) return null
+  
   const verified = await verifyPassword(password, user.passwordHash)
   return verified ? publicUser(user) : null
 }
