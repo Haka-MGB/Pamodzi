@@ -2,223 +2,168 @@
 
 A modern property management platform for landlords to manage tenants, rent payments, maintenance requests, and property operations.
 
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ installed
-- npm or yarn package manager
+- Node.js 18+
+- Supabase account
+- Vercel account (for deployment)
 
-### Installation
+### Local Development
 
-1. **Clone and install dependencies**
+1. **Install dependencies**
 ```bash
 npm install
 ```
 
 2. **Set up environment variables**
+
+Copy `.env.example` to `.env.local`:
 ```bash
-cp .env.example .env
-# Generate a secure session secret
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# Copy the output and update PAMODZI_SESSION_SECRET in .env
+cp .env.example .env.local
 ```
 
-3. **Run development server**
+Update with your values:
+```env
+PAMODZI_SESSION_SECRET="your-32-char-secret"
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+Generate session secret:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+3. **Set up Supabase database**
+
+- Go to [Supabase SQL Editor](https://supabase.com/dashboard)
+- Run the SQL from `supabase-rls-policies.sql`
+- This creates tables and security policies
+
+4. **Run development server**
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000)
 
-4. **Create your account**
-- Click "Create one" on the login page
-- Fill in your details
-- Start managing your properties!
+---
 
 ## 📦 Production Deployment
 
-### Build for Production
-```bash
-npm run build
-npm start
+### 1. Set Environment Variables in Vercel
+
+Go to **Vercel Dashboard → Settings → Environment Variables**
+
+Add these 3 variables (for all environments):
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+PAMODZI_SESSION_SECRET=your-32-char-secret
 ```
 
-### Verify Deployment
+### 2. Deploy
+
 ```bash
-node scripts/verify-deployment.js
+git push origin main
 ```
 
-See [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md) for complete deployment guide.
+Or use Vercel CLI:
+```bash
+vercel --prod
+```
+
+### 3. Verify Deployment
+
+- Create a test account
+- Add a property
+- Add a tenant
+- Record a payment
+- Verify all features work
+
+---
 
 ## ✨ Features
 
-### Dashboard
-- Real-time portfolio overview with key metrics
-- Revenue charts and payment status breakdown
-- Activity feed and alerts with internal scrolling
-- Responsive viewport-locked layout
+- **Dashboard** - Real-time portfolio overview with metrics
+- **Properties** - Multi-property portfolio management
+- **Tenants** - Complete tenant directory with lease tracking
+- **Payments** - Track and confirm rent payments
+- **Maintenance** - Work order tracking with priorities
+- **Reports** - Revenue analytics and trends
+- **Notifications** - Activity feed and alerts
 
-### Payments Management
-- Track paid, pending, and overdue payments
-- Searchable tenant selector with keyboard navigation
-- Confirm payments and send reminders
-- Export to Excel/PDF formats
-- Download individual receipts
-
-### Tenant Management
-- Complete tenant directory with search
-- Manage lease details and contact information
-- View payment history per tenant
-- Password-protected deletions
-
-### Property Management
-- Multi-property portfolio support
-- Unit occupancy tracking
-- Revenue monitoring per property
-- Manage individual units
-
-### Maintenance
-- Work order tracking with priority levels
-- Filter by status (open, in-progress, resolved)
-- Assign contractors
-- Priority-based sorting
-
-### Reports & Analytics
-- Custom report generation
-- Revenue trend visualization
-- Quick export templates
-- Multiple format support (Excel, PDF)
-
-### Settings
-- Profile management
-- Notification preferences
-- Dark mode support
-- System customization
+---
 
 ## 🏗️ Tech Stack
 
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Charts**: Recharts
-- **Icons**: Lucide React
-- **Storage**: JSON file-based (development)
-- **Authentication**: Session-based with bcrypt
+- **Framework:** Next.js 16 (App Router)
+- **Language:** TypeScript
+- **Database:** Supabase (PostgreSQL)
+- **Styling:** Tailwind CSS
+- **Charts:** Recharts
+- **Auth:** Session-based with bcrypt
+
+---
+
+## 🔐 Security
+
+- Password hashing (bcrypt)
+- Session-based authentication
+- Row Level Security (RLS) in Supabase
+- Rate limiting on auth endpoints
+- Security headers (CSP, X-Frame-Options, etc.)
+- Data isolation per user
+
+---
 
 ## 📁 Project Structure
 
 ```
 pamodzi/
-├── app/                      # Next.js app router
-│   ├── (auth)/              # Authentication pages
-│   ├── (dashboard)/         # Dashboard pages
-│   └── api/                 # API routes
-├── components/              # React components
-│   ├── charts/             # Chart components
-│   ├── layout/             # Layout components
-│   └── ui/                 # UI primitives
-├── context/                # React context
-├── lib/                    # Utilities and helpers
-│   └── server/            # Server-only code
-├── types/                  # TypeScript types
-├── public/                 # Static assets
-└── .data/                  # Database storage (gitignored)
+├── app/                    # Next.js app router
+│   ├── (auth)/            # Auth pages (login, register)
+│   ├── (dashboard)/       # Dashboard pages
+│   └── api/               # API routes
+├── components/            # React components
+├── lib/                   # Utilities
+│   └── server/           # Server-only code
+├── types/                 # TypeScript types
+└── supabase-rls-policies.sql  # Database setup
 ```
 
-## 🔐 Security Features
+---
 
-- Password hashing with bcrypt
-- Session-based authentication
-- Rate limiting on auth endpoints
-- Same-origin request validation
-- Password-protected sensitive operations
-- User data isolation
+## 🐛 Troubleshooting
 
-## 🧪 Testing
-
-### Manual Testing
-Use the comprehensive checklist in [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
-
-### Automated Verification
+### Build Fails
 ```bash
-# Start the server first
-npm run dev
-
-# In another terminal, run verification
-node scripts/verify-deployment.js
+# Test build locally first
+npm run build
 ```
 
-## 📊 Database
+### Authentication Issues
+- Verify environment variables are set correctly
+- Check Supabase RLS policies are applied
+- Ensure database tables exist
 
-**Development/Demo**: JSON file storage (`.data/pamodzi-db.json`)
-- Atomic writes with backup rotation
-- Auto-recovery from corruption
-- Keeps last 5 backups
+### Database Errors
+- Check Supabase logs in dashboard
+- Verify RLS policies allow the operation
+- Ensure user has proper permissions
 
-**Production**: Replace `lib/server/db.ts` with your database adapter (PostgreSQL, MySQL, etc.)
-
-## 🎨 UI Features
-
-- Responsive design (mobile, tablet, desktop)
-- Dark mode support
-- Smooth scroll panels for long lists
-- Keyboard navigation
-- Toast notifications
-- Loading states
-- Form validation
-- Accessible modals
-
-## 🔄 API Endpoints
-
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/register` - Create account
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/session` - Get current session
-
-### Data
-- `GET /api/app-data` - Get all user data
-- `GET /api/health` - Health check
-
-### Payments
-- `POST /api/payments` - Create payment
-- `PATCH /api/payments/[id]/confirm` - Confirm payment
-- `DELETE /api/payments/[id]` - Delete payment
-
-### Tenants
-- `POST /api/tenants` - Create tenant
-- `PATCH /api/tenants/[id]` - Update tenant
-- `DELETE /api/tenants/[id]` - Delete tenant
-
-### Properties
-- `POST /api/properties` - Create property
-- `PATCH /api/properties/[id]` - Update property
-- `DELETE /api/properties/[id]` - Delete property
-
-### Maintenance
-- `POST /api/issues` - Create issue
-- `PATCH /api/issues/[id]` - Update issue
-
-### Notifications
-- `PATCH /api/notifications/[id]` - Mark as read
-- `POST /api/notifications/read-all` - Mark all as read
-
-## 🤝 Contributing
-
-This is a demo application. For production use, consider:
-- Migrating to a production database
-- Adding email service integration
-- Implementing file upload functionality
-- Adding comprehensive test coverage
-- Setting up CI/CD pipelines
+---
 
 ## 📄 License
 
 Private - All rights reserved
 
+---
+
 ## 🎯 Status
 
-**Current Version**: 0.1.0  
-**Status**: ✅ **READY FOR TESTING**
-
-All core features are implemented and functional. See [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md) for production recommendations.
+**Version:** 0.1.0  
+**Status:** ✅ Production Ready
