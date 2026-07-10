@@ -1,3 +1,4 @@
+// Supabase Database Types
 export type Database = {
   public: {
     Tables: {
