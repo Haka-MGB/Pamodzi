@@ -219,6 +219,126 @@ export type Database = {
           updated_at?: string
         }
       }
+      issues: {
+        Row: {
+          id: string
+          owner_id: string
+          title: string
+          description: string
+          tenant: string
+          tenant_id: string
+          unit: string
+          category: string
+          status: string
+          priority: string
+          date: string
+          assignee: string | null
+          icon: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          title: string
+          description: string
+          tenant: string
+          tenant_id: string
+          unit: string
+          category: string
+          status: string
+          priority: string
+          date: string
+          assignee?: string | null
+          icon: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          title?: string
+          description?: string
+          tenant?: string
+          tenant_id?: string
+          unit?: string
+          category?: string
+          status?: string
+          priority?: string
+          date?: string
+          assignee?: string | null
+          icon?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      activity: {
+        Row: {
+          id: string
+          owner_id: string
+          type: string
+          icon: string
+          text: string
+          time: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          type: string
+          icon: string
+          text: string
+          time: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          type?: string
+          icon?: string
+          text?: string
+          time?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      revenue_data: {
+        Row: {
+          id: string
+          owner_id: string
+          month: string
+          cbd: number
+          ndola: number
+          parklands: number
+          total: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          month: string
+          cbd: number
+          ndola: number
+          parklands: number
+          total: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          month?: string
+          cbd?: number
+          ndola?: number
+          parklands?: number
+          total?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
       notifications: {
         Row: {
           id: string
