@@ -348,6 +348,7 @@ export type Database = {
           message: string
           time: string
           read: boolean
+          link: string | null
           created_at: string
           updated_at: string
         }
@@ -359,6 +360,7 @@ export type Database = {
           message: string
           time: string
           read?: boolean
+          link?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -370,6 +372,7 @@ export type Database = {
           message?: string
           time?: string
           read?: boolean
+          link?: string | null
           created_at?: string
           updated_at?: string
         }
