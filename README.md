@@ -2,87 +2,7 @@
 
 A modern property management platform for landlords to manage tenants, rent payments, maintenance requests, and property operations.
 
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+
-- Supabase account
-- Vercel account (for deployment)
-
-### Local Development
-
-1. **Install dependencies**
-```bash
-npm install
-```
-
-2. **Set up environment variables**
-
-Copy `.env.example` to `.env.local`:
-```bash
-cp .env.example .env.local
-```
-
-Update with your values:
-```env
-PAMODZI_SESSION_SECRET="your-32-char-secret"
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
-
-Generate session secret:
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-3. **Set up Supabase database**
-
-- Go to [Supabase SQL Editor](https://supabase.com/dashboard)
-- Run the SQL from `supabase-rls-policies.sql`
-- This creates tables and security policies
-
-4. **Run development server**
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
----
-
-## 📦 Production Deployment
-
-### 1. Set Environment Variables in Vercel
-
-Go to **Vercel Dashboard → Settings → Environment Variables**
-
-Add these 3 variables (for all environments):
-```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-PAMODZI_SESSION_SECRET=your-32-char-secret
-```
-
-### 2. Deploy
-
-```bash
-git push origin main
-```
-
-Or use Vercel CLI:
-```bash
-vercel --prod
-```
-
-### 3. Verify Deployment
-
-- Create a test account
-- Add a property
-- Add a tenant
-- Record a payment
-- Verify all features work
+**Status:** ✅ Production Ready | **Version:** 0.1.0
 
 ---
 
@@ -95,6 +15,106 @@ vercel --prod
 - **Maintenance** - Work order tracking with priorities
 - **Reports** - Revenue analytics and trends
 - **Notifications** - Activity feed and alerts
+- **Dark Mode** - Full dark/light theme support
+- **Responsive Design** - Mobile, tablet, and desktop
+- **Secure Auth** - Password hashing, sessions, Row Level Security
+
+---
+
+## 🏗️ Tech Stack
+
+- **Framework:** Next.js 16 (App Router)
+- **Language:** TypeScript
+- **Database:** Supabase (PostgreSQL)
+- **Styling:** Tailwind CSS
+- **Charts:** Recharts
+- **Icons:** Lucide React
+- **Auth:** Bcrypt password hashing + Session-based
+
+---
+
+## 🚀 Quick Start
+
+### For Local Development
+See [SETUP.md](./SETUP.md) for complete local setup instructions.
+
+**TL;DR:**
+```bash
+npm install
+cp .env.example .env.local
+# Edit .env.local with Supabase credentials
+npm run dev
+```
+
+### For Production Deployment
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment guide.
+
+**TL;DR:**
+1. Set environment variables in Vercel
+2. Push to GitHub (auto-deploys)
+3. Run Supabase SQL setup
+
+---
+
+## 📋 Common Tasks
+
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm start        # Start production server
+npm run lint     # Run linter
+```
+
+---
+
+## 🔒 Security Features
+
+- ✅ Password hashing with bcrypt
+- ✅ Session-based authentication
+- ✅ Row Level Security (RLS) policies
+- ✅ Rate limiting on auth endpoints
+- ✅ Protected routes
+- ✅ Password-protected sensitive operations
+- ✅ User data isolation
+
+---
+
+## 📊 Project Structure
+
+```
+app/
+  ├── (auth)/           # Login/register pages
+  ├── (dashboard)/      # Dashboard and app pages
+  └── api/              # API routes
+components/
+  ├── charts/           # Dashboard charts
+  ├── layout/           # Navigation components
+  ├── modals/           # Modal dialogs
+  └── ui/               # Reusable UI components
+lib/
+  ├── server/           # Server-side utilities
+  └── client-api.ts     # Client API calls
+types/                  # TypeScript types
+```
+
+---
+
+## 🐛 Troubleshooting
+
+Having issues? Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for:
+- Login/registration failures
+- Environment variable problems
+- Supabase setup issues
+- Debug scripts
+
+---
+
+## 📚 Documentation
+
+- [SETUP.md](./SETUP.md) - Local development setup
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Production deployment
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Common issues & fixes
+- [Documatation/PROJECT_STATUS.md](./Documatation/PROJECT_STATUS.md) - Feature status
 
 ---
 

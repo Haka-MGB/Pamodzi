@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 
 const KEY_LENGTH = 64
@@ -9,11 +10,27 @@ export async function hashPassword(password: string) {
 }
 
 export async function verifyPassword(password: string, storedHash: string) {
-  const [scheme, salt, expected] = storedHash.split(':')
-  if (scheme !== 'scrypt' || !salt || !expected) return false
+  if (storedHash.startsWith('scrypt:')) {
+    const [scheme, salt, expected] = storedHash.split(':')
+    if (scheme !== 'scrypt' || !salt || !expected) return false
 
-  const actual = await scrypt(password, salt)
-  return safeEqual(actual, expected)
+    const actual = await scrypt(password, salt)
+    return safeEqual(actual, expected)
+  }
+
+  if (
+    storedHash.startsWith('$2a$') ||
+    storedHash.startsWith('$2b$') ||
+    storedHash.startsWith('$2y$')
+  ) {
+    return bcrypt.compare(password, storedHash)
+  }
+
+  if (storedHash.startsWith('bcrypt:')) {
+    return bcrypt.compare(password, storedHash.slice('bcrypt:'.length))
+  }
+
+  return false
 }
 
 function scrypt(password: string, salt: string) {
