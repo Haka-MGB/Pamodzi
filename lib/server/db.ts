@@ -257,7 +257,7 @@ export async function createAccount(input: { name: string; company: string; phon
     return { ok: false as const, message: 'An account already exists for this email address.' }
   }
 
-  const { data, error } = await supabase.from('users').insert({
+  const userData: Database['public']['Tables']['users']['Insert'] = {
     id: userId,
     name: input.name,
     email: input.email,
@@ -269,7 +269,9 @@ export async function createAccount(input: { name: string; company: string; phon
     password_hash: passwordHash,
     created_at: now,
     updated_at: now,
-  }).select().single()
+  }
+
+  const { data, error } = await supabase.from('users').insert([userData]).select().single()
 
   if (error || !data) {
     console.error('Error creating account:', error)

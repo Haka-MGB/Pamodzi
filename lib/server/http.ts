@@ -41,9 +41,19 @@ export function requireSameOrigin(request: NextRequest) {
   if (!origin) return true
 
   try {
-    return new URL(origin).host === request.nextUrl.host
+    const originHost = new URL(origin).host
+    const host = request.headers.get('host')
+    const forwardedHost = request.headers.get('x-forwarded-host')
+    const allowedHosts = new Set([request.nextUrl.host])
+
+    if (host) allowedHosts.add(host)
+    forwardedHost?.split(',').forEach(value => {
+      const forwarded = value.trim()
+      if (forwarded) allowedHosts.add(forwarded)
+    })
+
+    return allowedHosts.has(originHost)
   } catch {
     return false
   }
 }
-
