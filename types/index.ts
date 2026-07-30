@@ -4,6 +4,7 @@ export type PaymentStatus = 'paid' | 'pending' | 'overdue'
 export type IssueStatus   = 'open' | 'in-progress' | 'resolved'
 export type IssuePriority = 'urgent' | 'high' | 'medium' | 'low'
 export type TenantStatus  = 'active' | 'overdue' | 'vacating'
+export type UnitStatus    = 'vacant' | 'occupied' | 'maintenance'
 
 export interface User {
   id: string
@@ -24,6 +25,24 @@ export interface Property {
   totalUnits: number
   occupiedUnits: number
   monthlyRevenue: number
+}
+
+export interface Unit {
+  id: string
+  propertyId: string
+  unitName: string
+  unitNumber?: string
+  floor?: string
+  bedrooms?: number
+  bathrooms?: number
+  squareFeet?: number
+  rentAmount: number
+  status: UnitStatus
+  tenantId?: string
+  tenantName?: string
+  tenantEmail?: string
+  tenantPhone?: string
+  notes?: string
 }
 
 export interface Tenant {
@@ -98,6 +117,7 @@ export interface RevenueDataPoint {
 export interface AppState {
   user: User
   properties: Property[]
+  units: Unit[]
   tenants: Tenant[]
   payments: Payment[]
   issues: MaintenanceIssue[]

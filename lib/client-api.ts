@@ -1,8 +1,9 @@
-import type { ActivityItem, MaintenanceIssue, Notification, Payment, Property, RevenueDataPoint, Tenant, User } from '@/types'
+import type { ActivityItem, MaintenanceIssue, Notification, Payment, Property, RevenueDataPoint, Tenant, Unit, User } from '@/types'
 
 export interface AppData {
   user: User
   properties: Property[]
+  units: Unit[]
   tenants: Tenant[]
   payments: Payment[]
   issues: MaintenanceIssue[]

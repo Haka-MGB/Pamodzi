@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
 
   const input = parseProperty(await readJson(request))
   if (!input) return fail('Check the property details.')
-  return ok(await addProperty(userId, input), { status: 201 })
+  const property = await addProperty(userId, input)
+  if (!property) return fail('Unable to save property.', 500)
+  return ok(property, { status: 201 })
 }
-

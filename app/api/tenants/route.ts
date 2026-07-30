@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
 
   const input = parseTenant(await readJson(request))
   if (!input) return fail('Check the tenant details.')
-  return ok(await addTenant(userId, input), { status: 201 })
+  const tenant = await addTenant(userId, input)
+  if (!tenant) return fail('Unable to save tenant.', 500)
+  return ok(tenant, { status: 201 })
 }
-

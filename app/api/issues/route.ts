@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
 
   const input = parseIssue(await readJson(request))
   if (!input) return fail('Check the issue details.')
-  return ok(await addIssue(userId, input), { status: 201 })
+  const issue = await addIssue(userId, input)
+  if (!issue) return fail('Unable to save issue.', 500)
+  return ok(issue, { status: 201 })
 }
-

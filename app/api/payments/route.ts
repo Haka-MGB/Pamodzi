@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
 
   const input = parsePayment(await readJson(request))
   if (!input) return fail('Check the payment details.')
-  return ok(await addPayment(userId, input), { status: 201 })
+  const payment = await addPayment(userId, input)
+  if (!payment) return fail('Unable to save payment.', 500)
+  return ok(payment, { status: 201 })
 }
-

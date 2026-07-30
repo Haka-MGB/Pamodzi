@@ -1,8 +1,9 @@
 import crypto from 'crypto'
-import type { ActivityItem, MaintenanceIssue, Notification, Payment, Property, RevenueDataPoint, Tenant, User } from '@/types'
+import type { ActivityItem, MaintenanceIssue, Notification, Payment, Property, RevenueDataPoint, Tenant, Unit, User } from '@/types'
 import { hashPassword, verifyPassword } from './password'
 import { getSupabaseClient } from './supabase'
 import type { Database } from '@/types/supabase'
+import { logError, logOperation, logDebug } from './logger'
 
 type DbUser = Database['public']['Tables']['users']['Row']
 type DbProperty = Database['public']['Tables']['properties']['Row']
@@ -12,6 +13,24 @@ type DbIssue = Database['public']['Tables']['issues']['Row']
 type DbNotification = Database['public']['Tables']['notifications']['Row']
 type DbActivity = Database['public']['Tables']['activity']['Row']
 type DbRevenue = Database['public']['Tables']['revenue_data']['Row']
+
+interface DbUnit {
+  id: string
+  owner_id: string
+  property_id: string
+  unit_name: string
+  unit_number: string | null
+  floor: string | null
+  bedrooms: number | null
+  bathrooms: number | null
+  square_feet: number | null
+  rent_amount: number
+  status: string
+  tenant_id: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
 
 interface StoredUser extends User {
   passwordHash: string
@@ -183,6 +202,42 @@ function revenueFromDb(row: DbRevenue): RevenueDataPoint {
   }
 }
 
+function unitFromDb(row: DbUnit, tenantInfo?: { name?: string; email?: string; phone?: string }): Unit {
+  return {
+    id: row.id,
+    propertyId: row.property_id,
+    unitName: row.unit_name,
+    unitNumber: row.unit_number ?? undefined,
+    floor: row.floor ?? undefined,
+    bedrooms: row.bedrooms ?? undefined,
+    bathrooms: row.bathrooms ?? undefined,
+    squareFeet: row.square_feet ?? undefined,
+    rentAmount: row.rent_amount,
+    status: row.status as Unit['status'],
+    tenantId: row.tenant_id ?? undefined,
+    tenantName: tenantInfo?.name,
+    tenantEmail: tenantInfo?.email,
+    tenantPhone: tenantInfo?.phone,
+    notes: row.notes ?? undefined,
+  }
+}
+
+function unitToDb(input: Omit<Unit, 'id' | 'tenantName' | 'tenantEmail' | 'tenantPhone'>) {
+  return {
+    property_id: input.propertyId,
+    unit_name: input.unitName,
+    unit_number: input.unitNumber ?? null,
+    floor: input.floor ?? null,
+    bedrooms: input.bedrooms ?? null,
+    bathrooms: input.bathrooms ?? null,
+    square_feet: input.squareFeet ?? null,
+    rent_amount: input.rentAmount,
+    status: input.status,
+    tenant_id: input.tenantId ?? null,
+    notes: input.notes ?? null,
+  }
+}
+
 // ─── Public API ─────────────────────────────────────────────────────────
 
 let isInitialized = false
@@ -204,23 +259,33 @@ export async function initializeDatabase() {
 }
 
 export async function getUserByEmail(email: string) {
-  const supabase = await getSupabaseClient()
+  logOperation('getUserByEmail', 'started', { email })
   
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .ilike('email', email)
-    .limit(1)
-    .single()
+  try {
+    const supabase = await getSupabaseClient()
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .ilike('email', email)
+      .limit(1)
+      .single()
 
-  if (error) {
-    if (error.code !== 'PGRST116') {
-      console.error('Error fetching user by email:', error)
+    if (error) {
+      if (error.code !== 'PGRST116') {
+        logError(error, { operation: 'getUserByEmail', email })
+      }
+      logOperation('getUserByEmail', 'failed', { email, errorCode: error.code })
+      return null
     }
+    
+    logOperation('getUserByEmail', 'completed', { email, found: !!data })
+    return data ? userFromDb(data) : null
+  } catch (err) {
+    logError(err, { operation: 'getUserByEmail', email })
+    logOperation('getUserByEmail', 'failed', { email })
     return null
   }
-  
-  return data ? userFromDb(data) : null
 }
 
 export async function getUserById(userId: string) {
@@ -247,38 +312,49 @@ export async function authenticate(email: string, password: string) {
 }
 
 export async function createAccount(input: { name: string; company: string; phone: string; email: string; password: string }) {
-  const supabase = await getSupabaseClient()
-  const passwordHash = await hashPassword(input.password)
-  const now = new Date().toISOString()
-  const userId = id('u')
+  logOperation('createAccount', 'started', { email: input.email, name: input.name })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const passwordHash = await hashPassword(input.password)
+    const now = new Date().toISOString()
+    const userId = id('u')
 
-  const existingUser = await getUserByEmail(input.email)
-  if (existingUser) {
-    return { ok: false as const, message: 'An account already exists for this email address.' }
+    const existingUser = await getUserByEmail(input.email)
+    if (existingUser) {
+      logOperation('createAccount', 'failed', { email: input.email, reason: 'duplicate_email' })
+      return { ok: false as const, message: 'An account already exists for this email address.' }
+    }
+
+    const userData: Database['public']['Tables']['users']['Insert'] = {
+      id: userId,
+      name: input.name,
+      email: input.email,
+      role: 'Landlord',
+      location: 'Zambia',
+      phone: input.phone,
+      company: input.company,
+      initials: initials(input.name),
+      password_hash: passwordHash,
+      created_at: now,
+      updated_at: now,
+    }
+
+    const { data, error } = await supabase.from('users').insert([userData]).select().single()
+
+    if (error || !data) {
+      logError(error, { operation: 'createAccount', email: input.email })
+      logOperation('createAccount', 'failed', { email: input.email })
+      return { ok: false as const, message: 'Failed to create account. Please try again.' }
+    }
+
+    logOperation('createAccount', 'completed', { email: input.email, userId })
+    return { ok: true as const, user: publicUser(userFromDb(data))! }
+  } catch (err) {
+    logError(err, { operation: 'createAccount', email: input.email })
+    logOperation('createAccount', 'failed', { email: input.email })
+    return { ok: false as const, message: 'An unexpected error occurred. Please try again.' }
   }
-
-  const userData: Database['public']['Tables']['users']['Insert'] = {
-    id: userId,
-    name: input.name,
-    email: input.email,
-    role: 'Landlord',
-    location: 'Zambia',
-    phone: input.phone,
-    company: input.company,
-    initials: initials(input.name),
-    password_hash: passwordHash,
-    created_at: now,
-    updated_at: now,
-  }
-
-  const { data, error } = await supabase.from('users').insert([userData]).select().single()
-
-  if (error || !data) {
-    console.error('Error creating account:', error)
-    return { ok: false as const, message: 'Failed to create account. Please try again.' }
-  }
-
-  return { ok: true as const, user: publicUser(userFromDb(data))! }
 }
 
 export async function getAppData(userId: string) {
@@ -288,6 +364,7 @@ export async function getAppData(userId: string) {
 
   const [
     { data: properties },
+    { data: units },
     { data: tenants },
     { data: payments },
     { data: issues },
@@ -296,6 +373,7 @@ export async function getAppData(userId: string) {
     { data: revenueData },
   ] = await Promise.all([
     supabase.from('properties').select('*').eq('owner_id', userId),
+    supabase.from('units' as any).select('*, tenants!units_tenant_id_fkey(name, email, phone)').eq('owner_id', userId),
     supabase.from('tenants').select('*').eq('owner_id', userId),
     supabase.from('payments').select('*').eq('owner_id', userId),
     supabase.from('issues').select('*').eq('owner_id', userId),
@@ -307,6 +385,7 @@ export async function getAppData(userId: string) {
   return {
     user,
     properties: (properties || []).map(propertyFromDb),
+    units: (units || []).map((row: any) => unitFromDb(row, row.tenants)),
     tenants: (tenants || []).map(tenantFromDb),
     payments: (payments || []).map(paymentFromDb),
     issues: (issues || []).map(issueFromDb),
@@ -317,23 +396,52 @@ export async function getAppData(userId: string) {
 }
 
 export async function addProperty(userId: string, input: Omit<Property, 'id'>) {
-  const supabase = await getSupabaseClient()
-  const now = new Date().toISOString()
-  const propertyId = id('p')
+  logOperation('addProperty', 'started', { userId, propertyName: input.name })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const now = new Date().toISOString()
+    const propertyId = id('p')
 
-  const { data, error } = await supabase.from('properties').insert({
-    id: propertyId,
-    owner_id: userId,
-    ...propertyToDb(input),
-    created_at: now,
-    updated_at: now,
-  }).select().single()
+    const propertyData = {
+      id: propertyId,
+      owner_id: userId,
+      ...propertyToDb(input),
+      created_at: now,
+      updated_at: now,
+    }
 
-  if (error || !data) {
-    console.error('Error adding property:', error)
+    logDebug('Inserting property', { userId, propertyData })
+
+    const { data, error } = await supabase.from('properties').insert(propertyData).select().single()
+
+    if (error) {
+      logError(error, { 
+        operation: 'addProperty', 
+        userId, 
+        input,
+        errorCode: error.code,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint 
+      })
+      logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: error.message })
+      return null
+    }
+
+    if (!data) {
+      logError(new Error('No data returned from insert'), { operation: 'addProperty', userId, input })
+      logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: 'no_data_returned' })
+      return null
+    }
+    
+    logOperation('addProperty', 'completed', { userId, propertyId, propertyName: input.name })
+    return propertyFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'addProperty', userId, input })
+    logOperation('addProperty', 'failed', { userId, propertyName: input.name })
     return null
   }
-  return propertyFromDb(data)
 }
 
 export async function addTenant(userId: string, input: Omit<Tenant, 'id'>) {
@@ -606,6 +714,133 @@ export async function markAllNotificationsRead(userId: string) {
     return []
   }
   return (data || []).map(notificationFromDb)
+}
+
+// ─── Units CRUD ─────────────────────────────────────────────────────────
+
+export async function getUnitsByProperty(userId: string, propertyId: string) {
+  logOperation('getUnitsByProperty', 'started', { userId, propertyId })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const { data, error } = await supabase
+      .from('units' as any)
+      .select('*, tenants!units_tenant_id_fkey(name, email, phone)')
+      .eq('owner_id', userId)
+      .eq('property_id', propertyId)
+      .order('unit_name')
+
+    if (error) {
+      logError(error, { operation: 'getUnitsByProperty', userId, propertyId })
+      logOperation('getUnitsByProperty', 'failed', { userId, propertyId })
+      return []
+    }
+
+    logOperation('getUnitsByProperty', 'completed', { userId, propertyId, count: data?.length })
+    return (data || []).map((row: any) => unitFromDb(row, row.tenants))
+  } catch (err) {
+    logError(err, { operation: 'getUnitsByProperty', userId, propertyId })
+    return []
+  }
+}
+
+export async function addUnit(userId: string, input: Omit<Unit, 'id' | 'tenantName' | 'tenantEmail' | 'tenantPhone'>) {
+  logOperation('addUnit', 'started', { userId, unitName: input.unitName })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const now = new Date().toISOString()
+    const unitId = id('unit')
+
+    const { data, error } = await supabase.from('units' as any).insert({
+      id: unitId,
+      owner_id: userId,
+      ...unitToDb(input),
+      created_at: now,
+      updated_at: now,
+    }).select().single()
+
+    if (error || !data) {
+      logError(error, { operation: 'addUnit', userId, input })
+      logOperation('addUnit', 'failed', { userId, unitName: input.unitName })
+      return null
+    }
+    
+    logOperation('addUnit', 'completed', { userId, unitId, unitName: input.unitName })
+    return unitFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'addUnit', userId, input })
+    return null
+  }
+}
+
+export async function updateUnit(userId: string, unitId: string, updates: Partial<Unit>) {
+  logOperation('updateUnit', 'started', { userId, unitId })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const now = new Date().toISOString()
+
+    const dbUpdates: any = { updated_at: now }
+    if (updates.unitName !== undefined) dbUpdates.unit_name = updates.unitName
+    if (updates.unitNumber !== undefined) dbUpdates.unit_number = updates.unitNumber ?? null
+    if (updates.floor !== undefined) dbUpdates.floor = updates.floor ?? null
+    if (updates.bedrooms !== undefined) dbUpdates.bedrooms = updates.bedrooms ?? null
+    if (updates.bathrooms !== undefined) dbUpdates.bathrooms = updates.bathrooms ?? null
+    if (updates.squareFeet !== undefined) dbUpdates.square_feet = updates.squareFeet ?? null
+    if (updates.rentAmount !== undefined) dbUpdates.rent_amount = updates.rentAmount
+    if (updates.status !== undefined) dbUpdates.status = updates.status
+    if (updates.tenantId !== undefined) dbUpdates.tenant_id = updates.tenantId ?? null
+    if (updates.notes !== undefined) dbUpdates.notes = updates.notes ?? null
+
+    const { data, error } = await supabase
+      .from('units' as any)
+      .update(dbUpdates)
+      .eq('id', unitId)
+      .eq('owner_id', userId)
+      .select()
+      .single()
+
+    if (error || !data) {
+      logError(error, { operation: 'updateUnit', userId, unitId, updates })
+      logOperation('updateUnit', 'failed', { userId, unitId })
+      return null
+    }
+    
+    logOperation('updateUnit', 'completed', { userId, unitId })
+    return unitFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'updateUnit', userId, unitId })
+    return null
+  }
+}
+
+export async function deleteUnit(userId: string, unitId: string) {
+  logOperation('deleteUnit', 'started', { userId, unitId })
+  
+  try {
+    const supabase = await getSupabaseClient()
+
+    const { data, error } = await supabase
+      .from('units' as any)
+      .delete()
+      .eq('id', unitId)
+      .eq('owner_id', userId)
+      .select()
+      .single()
+
+    if (error || !data) {
+      logError(error, { operation: 'deleteUnit', userId, unitId })
+      logOperation('deleteUnit', 'failed', { userId, unitId })
+      return null
+    }
+    
+    logOperation('deleteUnit', 'completed', { userId, unitId })
+    return unitFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'deleteUnit', userId, unitId })
+    return null
+  }
 }
 
 function publicUser(user: StoredUser | null): User | null {
