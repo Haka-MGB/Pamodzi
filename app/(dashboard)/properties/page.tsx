@@ -8,7 +8,7 @@ import Modal from '@/components/ui/Modal'
 import { Building2, DoorOpen, Eye, MapPin, Plus, Settings2, Wallet, Edit3, User, Trash2, Check, X } from 'lucide-react'
 
 export default function PropertiesPage() {
-  const { properties: rawProperties, units, tenants, addProperty, updateProperty, deleteProperty, updateUnit, deleteUnit, showToast } = useApp()
+  const { properties: rawProperties, units, tenants, addProperty, updateProperty, deleteProperty, addUnit, updateUnit, deleteUnit, showToast } = useApp()
   const properties = Array.isArray(rawProperties) ? rawProperties.filter(p => p != null) : []
 
   const [addOpen, setAddOpen] = useState(false)
@@ -51,6 +51,26 @@ export default function PropertiesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
 
+  function resetUnitForm() {
+    setUnitForm({
+      unitName: '',
+      unitNumber: '',
+      floor: '',
+      bedrooms: '0',
+      bathrooms: '0',
+      squareFeet: '',
+      rentAmount: '0',
+      status: 'vacant',
+      tenantId: '',
+      notes: '',
+    })
+  }
+
+  function openAddUnit() {
+    setEditingUnitId('new')
+    resetUnitForm()
+  }
+
   function openEditUnit(unit: typeof editingUnit) {
     if (!unit) return
     setEditingUnitId(unit.id)
@@ -69,14 +89,15 @@ export default function PropertiesPage() {
   }
 
   async function handleSaveUnit() {
-    if (!editingUnitId) return
+    if (!editingUnitId || !manageProperty) return
     if (!unitForm.unitName.trim()) {
       showToast('error', 'Unit name is required.')
       return
     }
 
     try {
-      await updateUnit(editingUnitId, {
+      const payload = {
+        propertyId: manageProperty.id,
         unitName: unitForm.unitName.trim(),
         unitNumber: unitForm.unitNumber.trim() || undefined,
         floor: unitForm.floor.trim() || undefined,
@@ -87,11 +108,20 @@ export default function PropertiesPage() {
         status: unitForm.status,
         tenantId: unitForm.tenantId || undefined,
         notes: unitForm.notes.trim() || undefined,
-      })
-      showToast('success', 'Unit updated successfully.')
+      }
+
+      if (editingUnitId === 'new') {
+        await addUnit(payload)
+        showToast('success', 'Unit added successfully.')
+      } else {
+        await updateUnit(editingUnitId, payload)
+        showToast('success', 'Unit updated successfully.')
+      }
+
       setEditingUnitId(null)
+      resetUnitForm()
     } catch (error) {
-      showToast('error', error instanceof Error ? error.message : 'Unable to update unit.')
+      showToast('error', error instanceof Error ? error.message : 'Unable to save unit.')
     }
   }
 
@@ -109,6 +139,84 @@ export default function PropertiesPage() {
   function getTenantForUnit(unit: typeof editingUnit) {
     if (!unit || !unit.tenantId) return null
     return tenants.find(t => t.id === unit.tenantId)
+  }
+
+  function renderUnitForm() {
+    if (!manageProperty) return null
+
+    return (
+      <div className="space-y-3">
+        <div className="field">
+          <label className="field-label">Unit Name *</label>
+          <input className="field-input" value={unitForm.unitName} onChange={e => setUnitForm(f => ({ ...f, unitName: e.target.value }))} placeholder="e.g. Shop 1 - Front Entrance" />
+        </div>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <div className="field">
+            <label className="field-label">Unit Number</label>
+            <input className="field-input" value={unitForm.unitNumber} onChange={e => setUnitForm(f => ({ ...f, unitNumber: e.target.value }))} placeholder="e.g. A1" />
+          </div>
+          <div className="field">
+            <label className="field-label">Floor</label>
+            <input className="field-input" value={unitForm.floor} onChange={e => setUnitForm(f => ({ ...f, floor: e.target.value }))} placeholder="e.g. Ground Floor" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="field">
+            <label className="field-label">Bedrooms</label>
+            <input type="number" min={0} className="field-input" value={unitForm.bedrooms} onChange={e => setUnitForm(f => ({ ...f, bedrooms: e.target.value }))} />
+          </div>
+          <div className="field">
+            <label className="field-label">Bathrooms</label>
+            <input type="number" min={0} className="field-input" value={unitForm.bathrooms} onChange={e => setUnitForm(f => ({ ...f, bathrooms: e.target.value }))} />
+          </div>
+          <div className="field">
+            <label className="field-label">Sq Ft</label>
+            <input type="number" min={0} className="field-input" value={unitForm.squareFeet} onChange={e => setUnitForm(f => ({ ...f, squareFeet: e.target.value }))} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="field">
+            <label className="field-label">Rent Amount</label>
+            <input type="number" min={0} className="field-input" value={unitForm.rentAmount} onChange={e => setUnitForm(f => ({ ...f, rentAmount: e.target.value }))} />
+          </div>
+          <div className="field">
+            <label className="field-label">Status</label>
+            <select className="field-select" value={unitForm.status} onChange={e => setUnitForm(f => ({ ...f, status: e.target.value as typeof unitForm.status }))}>
+              <option value="vacant">Vacant</option>
+              <option value="occupied">Occupied</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="field">
+          <label className="field-label">Assign Tenant</label>
+          <select className="field-select" value={unitForm.tenantId} onChange={e => setUnitForm(f => ({ ...f, tenantId: e.target.value }))}>
+            <option value="">No tenant</option>
+            {tenants.filter(t => t.propertyId === manageProperty.id).map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label className="field-label">Notes</label>
+          <textarea className="field-input" rows={2} value={unitForm.notes} onChange={e => setUnitForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional notes..." />
+        </div>
+
+        <div className="flex gap-2">
+          <button className="btn-primary btn flex-1" onClick={handleSaveUnit}>
+            <Check size={12} /> {editingUnitId === 'new' ? 'Add unit' : 'Save'}
+          </button>
+          <button className="btn" onClick={() => { setEditingUnitId(null); resetUnitForm() }}>
+            <X size={12} /> Cancel
+          </button>
+        </div>
+      </div>
+    )
   }
 
   async function handleAddProperty() {
@@ -299,10 +407,22 @@ export default function PropertiesPage() {
         footer={<button className="btn-primary btn" onClick={() => { setManageId(null); setEditingUnitId(null) }}>Done</button>}>
         {manageProperty && (
           <div className="space-y-3">
+            <div className="flex justify-end">
+              <button className="btn-primary btn btn-sm" onClick={openAddUnit}>
+                <Plus size={12} /> Add unit
+              </button>
+            </div>
+
             {managePropertyUnits.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No units created yet for this property.</p>
-                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Units will be available after running the database migration.</p>
+                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Add the first unit to start tracking rent, occupancy, and tenants.</p>
+              </div>
+            )}
+
+            {editingUnitId === 'new' && (
+              <div className="rounded-lg p-4" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-light)' }}>
+                {renderUnitForm()}
               </div>
             )}
             
@@ -369,79 +489,7 @@ export default function PropertiesPage() {
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="field">
-                        <label className="field-label">Unit Name *</label>
-                        <input className="field-input" value={unitForm.unitName} onChange={e => setUnitForm(f => ({ ...f, unitName: e.target.value }))} placeholder="e.g. Shop 1 - Front Entrance" />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="field">
-                          <label className="field-label">Unit Number</label>
-                          <input className="field-input" value={unitForm.unitNumber} onChange={e => setUnitForm(f => ({ ...f, unitNumber: e.target.value }))} placeholder="e.g. A1" />
-                        </div>
-                        <div className="field">
-                          <label className="field-label">Floor</label>
-                          <input className="field-input" value={unitForm.floor} onChange={e => setUnitForm(f => ({ ...f, floor: e.target.value }))} placeholder="e.g. Ground Floor" />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="field">
-                          <label className="field-label">Bedrooms</label>
-                          <input type="number" min={0} className="field-input" value={unitForm.bedrooms} onChange={e => setUnitForm(f => ({ ...f, bedrooms: e.target.value }))} />
-                        </div>
-                        <div className="field">
-                          <label className="field-label">Bathrooms</label>
-                          <input type="number" min={0} className="field-input" value={unitForm.bathrooms} onChange={e => setUnitForm(f => ({ ...f, bathrooms: e.target.value }))} />
-                        </div>
-                        <div className="field">
-                          <label className="field-label">Sq Ft</label>
-                          <input type="number" min={0} className="field-input" value={unitForm.squareFeet} onChange={e => setUnitForm(f => ({ ...f, squareFeet: e.target.value }))} />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="field">
-                          <label className="field-label">Rent Amount</label>
-                          <input type="number" min={0} className="field-input" value={unitForm.rentAmount} onChange={e => setUnitForm(f => ({ ...f, rentAmount: e.target.value }))} />
-                        </div>
-                        <div className="field">
-                          <label className="field-label">Status</label>
-                          <select className="field-select" value={unitForm.status} onChange={e => setUnitForm(f => ({ ...f, status: e.target.value as any }))}>
-                            <option value="vacant">Vacant</option>
-                            <option value="occupied">Occupied</option>
-                            <option value="maintenance">Maintenance</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="field">
-                        <label className="field-label">Assign Tenant</label>
-                        <select className="field-select" value={unitForm.tenantId} onChange={e => setUnitForm(f => ({ ...f, tenantId: e.target.value }))}>
-                          <option value="">No tenant</option>
-                          {tenants.filter(t => t.propertyId === manageProperty.id).map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="field">
-                        <label className="field-label">Notes</label>
-                        <textarea className="field-input" rows={2} value={unitForm.notes} onChange={e => setUnitForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional notes..." />
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button className="btn-primary btn flex-1" onClick={handleSaveUnit}>
-                          <Check size={12} /> Save
-                        </button>
-                        <button className="btn" onClick={() => setEditingUnitId(null)}>
-                          <X size={12} /> Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  ) : renderUnitForm()}
                 </div>
               )
             })}

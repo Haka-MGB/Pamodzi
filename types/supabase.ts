@@ -137,6 +137,75 @@ export type Database = {
         }
         Relationships: []
       }
+      units: {
+        Row: {
+          id: string
+          owner_id: string
+          property_id: string
+          unit_name: string
+          unit_number: string | null
+          floor: string | null
+          bedrooms: number | null
+          bathrooms: number | null
+          square_feet: number | null
+          rent_amount: number
+          status: string
+          tenant_id: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          owner_id: string
+          property_id: string
+          unit_name: string
+          unit_number?: string | null
+          floor?: string | null
+          bedrooms?: number | null
+          bathrooms?: number | null
+          square_feet?: number | null
+          rent_amount?: number
+          status?: string
+          tenant_id?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          owner_id?: string
+          property_id?: string
+          unit_name?: string
+          unit_number?: string | null
+          floor?: string | null
+          bedrooms?: number | null
+          bathrooms?: number | null
+          square_feet?: number | null
+          rent_amount?: number
+          status?: string
+          tenant_id?: string | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "units_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "units_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       payments: {
         Row: {
           id: string

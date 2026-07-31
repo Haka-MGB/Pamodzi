@@ -39,7 +39,13 @@ interface OperationLogEntry extends BaseLogEntry {
   metadata?: Record<string, unknown>
 }
 
-type LogEntry = RequestLogEntry | ErrorLogEntry | OperationLogEntry
+interface DebugLogEntry extends BaseLogEntry {
+  type: 'debug'
+  message: string
+  metadata?: Record<string, unknown>
+}
+
+type LogEntry = RequestLogEntry | ErrorLogEntry | OperationLogEntry | DebugLogEntry
 
 // Thread-local storage for request context
 const asyncLocalStorage = new Map<string, string>()
@@ -186,12 +192,13 @@ export function logDebug(message: string, metadata?: Record<string, unknown>) {
   if (!shouldLog('debug')) return
 
   try {
-    const entry = {
+    const entry: DebugLogEntry = {
       timestamp: new Date().toISOString(),
       level: 'debug' as const,
+      type: 'debug',
       message,
       requestId: getRequestContext(),
-      ...metadata,
+      metadata,
     }
     console.debug(formatLog(entry))
   } catch {

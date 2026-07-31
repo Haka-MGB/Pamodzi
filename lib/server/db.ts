@@ -13,24 +13,7 @@ type DbIssue = Database['public']['Tables']['issues']['Row']
 type DbNotification = Database['public']['Tables']['notifications']['Row']
 type DbActivity = Database['public']['Tables']['activity']['Row']
 type DbRevenue = Database['public']['Tables']['revenue_data']['Row']
-
-interface DbUnit {
-  id: string
-  owner_id: string
-  property_id: string
-  unit_name: string
-  unit_number: string | null
-  floor: string | null
-  bedrooms: number | null
-  bathrooms: number | null
-  square_feet: number | null
-  rent_amount: number
-  status: string
-  tenant_id: string | null
-  notes: string | null
-  created_at: string
-  updated_at: string
-}
+type DbUnit = Database['public']['Tables']['units']['Row']
 
 interface StoredUser extends User {
   passwordHash: string
@@ -373,7 +356,7 @@ export async function getAppData(userId: string) {
     { data: revenueData },
   ] = await Promise.all([
     supabase.from('properties').select('*').eq('owner_id', userId),
-    supabase.from('units' as any).select('*, tenants!units_tenant_id_fkey(name, email, phone)').eq('owner_id', userId),
+    supabase.from('units').select('*, tenants!units_tenant_id_fkey(name, email, phone)').eq('owner_id', userId),
     supabase.from('tenants').select('*').eq('owner_id', userId),
     supabase.from('payments').select('*').eq('owner_id', userId),
     supabase.from('issues').select('*').eq('owner_id', userId),
@@ -724,7 +707,7 @@ export async function getUnitsByProperty(userId: string, propertyId: string) {
   try {
     const supabase = await getSupabaseClient()
     const { data, error } = await supabase
-      .from('units' as any)
+      .from('units')
       .select('*, tenants!units_tenant_id_fkey(name, email, phone)')
       .eq('owner_id', userId)
       .eq('property_id', propertyId)
@@ -752,7 +735,7 @@ export async function addUnit(userId: string, input: Omit<Unit, 'id' | 'tenantNa
     const now = new Date().toISOString()
     const unitId = id('unit')
 
-    const { data, error } = await supabase.from('units' as any).insert({
+    const { data, error } = await supabase.from('units').insert({
       id: unitId,
       owner_id: userId,
       ...unitToDb(input),
@@ -794,7 +777,7 @@ export async function updateUnit(userId: string, unitId: string, updates: Partia
     if (updates.notes !== undefined) dbUpdates.notes = updates.notes ?? null
 
     const { data, error } = await supabase
-      .from('units' as any)
+      .from('units')
       .update(dbUpdates)
       .eq('id', unitId)
       .eq('owner_id', userId)
@@ -822,7 +805,7 @@ export async function deleteUnit(userId: string, unitId: string) {
     const supabase = await getSupabaseClient()
 
     const { data, error } = await supabase
-      .from('units' as any)
+      .from('units')
       .delete()
       .eq('id', unitId)
       .eq('owner_id', userId)

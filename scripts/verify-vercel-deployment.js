@@ -1,97 +1,125 @@
 #!/usr/bin/env node
 
 /**
- * Vercel Deployment Verification Script
- * 
- * This script verifies that all environment variables and configurations
- * are properly set for Vercel deployment.
+ * Vercel deployment readiness checks.
+ *
+ * This checks files and local env shape only. Vercel production must have
+ * the same required variables configured in the Vercel dashboard.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('fs')
+const path = require('path')
 
-const checks = [];
+const root = path.join(__dirname, '..')
+const envLocalPath = path.join(root, '.env.local')
 
-// Check 1: .env.local exists
-const envLocalPath = path.join(__dirname, '..', '.env.local');
-checks.push({
-  name: 'Environment file (.env.local)',
-  pass: fs.existsSync(envLocalPath),
-  fix: 'Create .env.local with required variables. See VERCEL_DEPLOYMENT_GUIDE.md'
-});
+function readEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return {}
 
-// Check 2: vercel.json exists
-const vercelJsonPath = path.join(__dirname, '..', 'vercel.json');
-checks.push({
-  name: 'Vercel configuration (vercel.json)',
-  pass: fs.existsSync(vercelJsonPath),
-  fix: 'vercel.json should exist in root directory'
-});
+  return fs.readFileSync(filePath, 'utf8').split(/\r?\n/).reduce((env, line) => {
+    const match = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/)
+    if (!match) return env
 
-// Check 3: next.config.js or next.config.ts exists
-const nextConfigPath = path.join(__dirname, '..', 'next.config.js');
-const nextConfigTsPath = path.join(__dirname, '..', 'next.config.ts');
-checks.push({
-  name: 'Next.js configuration',
-  pass: fs.existsSync(nextConfigPath) || fs.existsSync(nextConfigTsPath),
-  fix: 'Create next.config.js in root directory'
-});
-
-// Check 4: package.json exists and has required scripts
-const packageJsonPath = path.join(__dirname, '..', 'package.json');
-let hasRequiredScripts = false;
-if (fs.existsSync(packageJsonPath)) {
-  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  hasRequiredScripts = !!(pkg.scripts?.build && pkg.scripts?.start);
+    const value = match[2].trim().replace(/^['"]|['"]$/g, '')
+    env[match[1]] = value
+    return env
+  }, {})
 }
-checks.push({
-  name: 'Build and start scripts',
-  pass: hasRequiredScripts,
-  fix: 'Ensure package.json has "build" and "start" scripts'
-});
 
-// Check 5: API routes exist
-const apiAuthPath = path.join(__dirname, '..', 'app', 'api', 'auth');
-checks.push({
-  name: 'API authentication routes',
-  pass: fs.existsSync(apiAuthPath),
-  fix: 'Authentication API routes should be in app/api/auth'
-});
+const env = readEnvFile(envLocalPath)
+const checks = []
 
-// Check 6: Database configuration
-const dbPath = path.join(__dirname, '..', 'lib', 'server', 'db.ts');
-checks.push({
-  name: 'Database configuration',
-  pass: fs.existsSync(dbPath),
-  fix: 'Database adapter should be in lib/server/db.ts'
-});
+function check(name, pass, fix) {
+  checks.push({ name, pass, fix })
+}
 
-// Print results
-console.log('\n📋 Vercel Deployment Verification\n');
-console.log('━'.repeat(60));
+check(
+  'Environment file (.env.local)',
+  fs.existsSync(envLocalPath),
+  'Create .env.local with the required variables from .env.example.'
+)
 
-let allPass = true;
-checks.forEach((check, index) => {
-  const status = check.pass ? '✅' : '❌';
-  console.log(`${status} ${check.name}`);
-  if (!check.pass) {
-    console.log(`   → ${check.fix}`);
-    allPass = false;
+check(
+  'PAMODZI_SESSION_SECRET is set and strong',
+  typeof env.PAMODZI_SESSION_SECRET === 'string' && env.PAMODZI_SESSION_SECRET.length >= 32,
+  'Set PAMODZI_SESSION_SECRET to at least 32 random characters.'
+)
+
+check(
+  'NEXT_PUBLIC_SUPABASE_URL is set',
+  typeof env.NEXT_PUBLIC_SUPABASE_URL === 'string' && /^https:\/\/.+\.supabase\.co$/.test(env.NEXT_PUBLIC_SUPABASE_URL),
+  'Set NEXT_PUBLIC_SUPABASE_URL to your Supabase project URL.'
+)
+
+check(
+  'NEXT_PUBLIC_SUPABASE_ANON_KEY is set',
+  typeof env.NEXT_PUBLIC_SUPABASE_ANON_KEY === 'string' && env.NEXT_PUBLIC_SUPABASE_ANON_KEY.length > 40,
+  'Set NEXT_PUBLIC_SUPABASE_ANON_KEY from Supabase Dashboard -> Settings -> API.'
+)
+
+check(
+  'SUPABASE_SERVICE_ROLE_KEY is set',
+  typeof env.SUPABASE_SERVICE_ROLE_KEY === 'string' && env.SUPABASE_SERVICE_ROLE_KEY.length > 40,
+  'Set SUPABASE_SERVICE_ROLE_KEY from Supabase Dashboard -> Settings -> API. Keep it server-only and never expose it to the browser.'
+)
+
+check(
+  'Vercel configuration (vercel.json)',
+  fs.existsSync(path.join(root, 'vercel.json')),
+  'vercel.json should exist in the project root.'
+)
+
+check(
+  'Next.js configuration',
+  fs.existsSync(path.join(root, 'next.config.js')) || fs.existsSync(path.join(root, 'next.config.ts')),
+  'Create next.config.js or next.config.ts in the project root.'
+)
+
+const packageJsonPath = path.join(root, 'package.json')
+let hasRequiredScripts = false
+if (fs.existsSync(packageJsonPath)) {
+  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+  hasRequiredScripts = Boolean(pkg.scripts && pkg.scripts.build && pkg.scripts.start)
+}
+
+check(
+  'Build and start scripts',
+  hasRequiredScripts,
+  'Ensure package.json has build and start scripts.'
+)
+
+check(
+  'API authentication routes',
+  fs.existsSync(path.join(root, 'app', 'api', 'auth')),
+  'Authentication API routes should be in app/api/auth.'
+)
+
+check(
+  'Supabase units SQL exists',
+  fs.existsSync(path.join(root, 'supabase-units-table.sql')),
+  'Keep supabase-units-table.sql available and run it in Supabase before using unit management.'
+)
+
+console.log('\nPamodzi Vercel Deployment Verification\n')
+console.log('-'.repeat(60))
+
+let allPass = true
+for (const item of checks) {
+  const status = item.pass ? 'PASS' : 'FAIL'
+  console.log(`${status} ${item.name}`)
+  if (!item.pass) {
+    console.log(`     ${item.fix}`)
+    allPass = false
   }
-});
+}
 
-console.log('━'.repeat(60));
+console.log('-'.repeat(60))
 
 if (allPass) {
-  console.log('\n✨ All checks passed! Your project is ready for Vercel deployment.\n');
-  console.log('Next steps:');
-  console.log('1. Generate session secret: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
-  console.log('2. Add to .env.local as PAMODZI_SESSION_SECRET');
-  console.log('3. Push to GitHub: git push origin main');
-  console.log('4. Connect repo to Vercel and set environment variables');
-  console.log('5. Deploy!\n');
-  process.exit(0);
-} else {
-  console.log('\n⚠️  Some checks failed. Please fix the issues above.\n');
-  process.exit(1);
+  console.log('\nAll local readiness checks passed.')
+  console.log('Also confirm these same env vars are set in Vercel Production, Preview, and Development as needed.\n')
+  process.exit(0)
 }
+
+console.log('\nSome checks failed. Fix them before deploying.\n')
+process.exit(1)
