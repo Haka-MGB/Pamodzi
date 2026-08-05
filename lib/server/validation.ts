@@ -9,9 +9,19 @@ export interface RegisterInput {
 }
 
 export function cleanText(value: unknown, maxLength = 120) {
-  return typeof value === 'string'
-    ? value.replace(/[\u0000-\u001F\u007F]/g, '').trim().slice(0, maxLength)
-    : ''
+  if (typeof value !== 'string') return ''
+  
+  // Remove control characters and trim
+  let cleaned = value.replace(/[\u0000-\u001F\u007F]/g, '').trim()
+  
+  // Basic HTML/script tag sanitization
+  cleaned = cleaned
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+  
+  return cleaned.slice(0, maxLength)
 }
 
 export function cleanEmail(value: unknown) {
@@ -92,6 +102,19 @@ export function parseTenant(value: Partial<Tenant> | null) {
   }
   if (!tenant.name || !tenant.unit || !tenant.propertyId || tenant.rent < 0) return null
   if (tenant.email && !isEmail(tenant.email)) return null
+  
+  // Validate lease dates
+  if (tenant.leaseStart && tenant.leaseEnd) {
+    const start = new Date(tenant.leaseStart)
+    const end = new Date(tenant.leaseEnd)
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new Error('Invalid lease dates provided.')
+    }
+   if (end < start) {
+  throw new Error('Lease end date must be after start date.')
+    }
+}
+  
   return tenant
 }
 

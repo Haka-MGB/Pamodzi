@@ -6,10 +6,12 @@ import { parseTenant } from '@/lib/server/validation'
 export async function POST(request: NextRequest) {
   if (!requireSameOrigin(request)) return fail('Invalid request origin.', 403)
   const userId = await requireUserId()
+  
   if (!userId) return fail('Authentication required.', 401)
 
   const input = parseTenant(await readJson(request))
   if (!input) return fail('Check the tenant details.')
+  
   const tenant = await addTenant(userId, input)
   if (!tenant) return fail('Unable to save tenant.', 500)
   return ok(tenant, { status: 201 })

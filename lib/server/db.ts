@@ -386,17 +386,38 @@ export async function addProperty(userId: string, input: Omit<Property, 'id'>) {
     const now = new Date().toISOString()
     const propertyId = id('p')
 
-    const propertyData = {
+    const propertyData: Database['public']['Tables']['properties']['Insert'] = {
       id: propertyId,
       owner_id: userId,
-      ...propertyToDb(input),
+      name: input.name,
+      location: input.location,
+      type: input.type,
+      total_units: input.totalUnits,
+      occupied_units: input.occupiedUnits,
+      monthly_revenue: input.monthlyRevenue,
       created_at: now,
       updated_at: now,
     }
 
     logDebug('Inserting property', { userId, propertyData })
 
-    const { data, error } = await supabase.from('properties').insert(propertyData).select().single()
+    // Try alternative insert method with explicit field list
+    const { data, error } = await supabase
+      .from('properties')
+      .insert([{
+        id: propertyId,
+        owner_id: userId,
+        name: input.name,
+        location: input.location,
+        type: input.type,
+        total_units: input.totalUnits,
+        occupied_units: input.occupiedUnits,
+        monthly_revenue: input.monthlyRevenue,
+        created_at: now,
+        updated_at: now,
+      }])
+      .select()
+      .single()
 
     if (error) {
       logError(error, { 
@@ -428,43 +449,163 @@ export async function addProperty(userId: string, input: Omit<Property, 'id'>) {
 }
 
 export async function addTenant(userId: string, input: Omit<Tenant, 'id'>) {
-  const supabase = await getSupabaseClient()
-  const now = new Date().toISOString()
-  const tenantId = id('t')
+  logOperation('addTenant', 'started', { userId, tenantName: input.name })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const now = new Date().toISOString()
+    const tenantId = id('t')
 
-  const { data, error } = await supabase.from('tenants').insert({
-    id: tenantId,
-    owner_id: userId,
-    ...tenantToDb(input),
-    created_at: now,
-    updated_at: now,
-  }).select().single()
+    const tenantData: Database['public']['Tables']['tenants']['Insert'] = {
+      id: tenantId,
+      owner_id: userId,
+      name: input.name,
+      initials: input.initials,
+      unit: input.unit,
+      property_id: input.propertyId,
+      property_name: input.propertyName,
+      rent: input.rent,
+      lease_start: input.leaseStart,
+      lease_end: input.leaseEnd,
+      status: input.status,
+      email: input.email,
+      phone: input.phone,
+      created_at: now,
+      updated_at: now,
+    }
 
-  if (error || !data) {
-    console.error('Error adding tenant:', error)
+    logDebug('Inserting tenant', { userId, tenantData })
+
+    // WORKAROUND: Use explicit column list in insert to force owner_id
+    const { data, error } = await supabase
+      .from('tenants')
+      .insert([{
+        id: tenantId,
+        owner_id: userId,  // Explicitly set first, separate from spread
+        name: input.name,
+        initials: input.initials,
+        unit: input.unit,
+        property_id: input.propertyId,
+        property_name: input.propertyName,
+        rent: input.rent,
+        lease_start: input.leaseStart,
+        lease_end: input.leaseEnd,
+        status: input.status,
+        email: input.email,
+        phone: input.phone,
+        created_at: now,
+        updated_at: now,
+      }])
+      .select()
+      .single()
+    
+    if (error) {
+      logError(error, { 
+        operation: 'addTenant', 
+        userId, 
+        input,
+        errorCode: error.code,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint 
+      })
+      logOperation('addTenant', 'failed', { userId, tenantName: input.name, reason: error.message })
+      return null
+    }
+
+    if (!data) {
+      logError(new Error('No data returned from insert'), { operation: 'addTenant', userId, input })
+      logOperation('addTenant', 'failed', { userId, tenantName: input.name, reason: 'no_data_returned' })
+      return null
+    }
+    
+    // ✅ AUTO-UPDATE: Set unit status to 'occupied' and link tenant
+    // Find the unit by matching property and unit name
+    const { data: unitsData } = await supabase
+      .from('units')
+      .select('id')
+      .eq('owner_id', userId)
+      .eq('property_id', input.propertyId)
+      .eq('unit_name', input.unit)
+      .single()
+    
+    if (unitsData?.id) {
+      const { error: unitError } = await supabase
+        .from('units')
+        .update({ 
+          status: 'occupied',
+          tenant_id: tenantId,
+          updated_at: now
+        })
+        .eq('id', unitsData.id)
+      
+      if (unitError) {
+        console.error('[WARN] Failed to update unit status:', unitError)
+        // Don't fail the tenant creation - just log the warning
+      } else {
+        console.log('[SUCCESS] Unit status updated to occupied, tenant linked')
+      }
+    }
+    
+    logOperation('addTenant', 'completed', { userId, tenantId, tenantName: input.name })
+    return tenantFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'addTenant', userId, input })
+    logOperation('addTenant', 'failed', { userId, tenantName: input.name })
     return null
   }
-  return tenantFromDb(data)
 }
 
 export async function addPayment(userId: string, input: Omit<Payment, 'id'>) {
-  const supabase = await getSupabaseClient()
-  const now = new Date().toISOString()
-  const paymentId = id('pay')
+  logOperation('addPayment', 'started', { userId, tenantId: input.tenantId })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const now = new Date().toISOString()
+    const paymentId = id('pay')
 
-  const { data, error } = await supabase.from('payments').insert({
-    id: paymentId,
-    owner_id: userId,
-    ...paymentToDb(input),
-    created_at: now,
-    updated_at: now,
-  }).select().single()
+    // ✅ FIXED: added `period: input.period` to satisfy NOT NULL constraint
+    const paymentData: Database['public']['Tables']['payments']['Insert'] = {
+      id: paymentId,
+      owner_id: userId,
+      tenant_id: input.tenantId,
+      tenant: input.tenant,
+      unit: input.unit,
+      amount: input.amount,
+      method: input.method,
+      ref: input.ref,
+      status: input.status,
+      date: input.date,
+      period: input.period,   // <-- THIS WAS MISSING
+      created_at: now,
+      updated_at: now,
+    }
 
-  if (error || !data) {
-    console.error('Error adding payment:', error)
+    const { data, error } = await supabase
+      .from('payments')
+      .insert([paymentData])
+      .select()
+      .single()
+
+    if (error) {
+      logError(error, { operation: 'addPayment', userId, input })
+      logOperation('addPayment', 'failed', { userId, tenantId: input.tenantId, reason: error.message })
+      return null
+    }
+
+    if (!data) {
+      logError(new Error('No data returned from insert'), { operation: 'addPayment', userId, input })
+      logOperation('addPayment', 'failed', { userId, tenantId: input.tenantId, reason: 'no_data_returned' })
+      return null
+    }
+    
+    logOperation('addPayment', 'completed', { userId, paymentId, tenantId: input.tenantId })
+    return paymentFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'addPayment', userId, input })
+    logOperation('addPayment', 'failed', { userId, tenantId: input.tenantId })
     return null
   }
-  return paymentFromDb(data)
 }
 
 export async function confirmPayment(userId: string, paymentId: string) {
@@ -532,23 +673,56 @@ export async function deleteProperty(userId: string, propertyId: string) {
 }
 
 export async function addIssue(userId: string, input: Omit<MaintenanceIssue, 'id'>) {
-  const supabase = await getSupabaseClient()
-  const now = new Date().toISOString()
-  const issueId = id('i')
+  logOperation('addIssue', 'started', { userId, title: input.title })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const now = new Date().toISOString()
+    const issueId = id('i')
 
-  const { data, error } = await supabase.from('issues').insert({
-    id: issueId,
-    owner_id: userId,
-    ...issueToDb(input),
-    created_at: now,
-    updated_at: now,
-  }).select().single()
+    const issueData: Database['public']['Tables']['issues']['Insert'] = {
+      id: issueId,
+      owner_id: userId,
+      tenant: input.tenant,
+      tenant_id: input.tenantId,
+      unit: input.unit,
+      title: input.title,
+      description: input.description,
+      category: input.category,
+      status: input.status,
+      priority: input.priority,
+      date: input.date,
+      assignee: input.assignee ?? null,
+      icon: input.icon,
+      created_at: now,
+      updated_at: now,
+    }
 
-  if (error || !data) {
-    console.error('Error adding issue:', error)
+    const { data, error } = await supabase
+      .from('issues')
+      .insert([issueData])
+      .select()
+      .single()
+
+    if (error) {
+      logError(error, { operation: 'addIssue', userId, input })
+      logOperation('addIssue', 'failed', { userId, title: input.title, reason: error.message })
+      return null
+    }
+
+    if (!data) {
+      logError(new Error('No data returned from insert'), { operation: 'addIssue', userId, input })
+      logOperation('addIssue', 'failed', { userId, title: input.title, reason: 'no_data_returned' })
+      return null
+    }
+    
+    logOperation('addIssue', 'completed', { userId, issueId, title: input.title })
+    return issueFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'addIssue', userId, input })
+    logOperation('addIssue', 'failed', { userId, title: input.title })
     return null
   }
-  return issueFromDb(data)
 }
 
 export async function updateIssue(userId: string, issueId: string, updates: Partial<MaintenanceIssue>) {
@@ -616,21 +790,70 @@ export async function updateTenant(userId: string, tenantId: string, updates: Pa
 }
 
 export async function deleteTenant(userId: string, tenantId: string) {
-  const supabase = await getSupabaseClient()
+  logOperation('deleteTenant', 'started', { userId, tenantId })
+  
+  try {
+    const supabase = await getSupabaseClient()
+    const now = new Date().toISOString()
 
-  const { data, error } = await supabase
-    .from('tenants')
-    .delete()
-    .eq('id', tenantId)
-    .eq('owner_id', userId)
-    .select()
-    .single()
+    // Get tenant data before deleting to find associated unit
+    const { data: tenantData } = await supabase
+      .from('tenants')
+      .select('property_id, unit')
+      .eq('id', tenantId)
+      .eq('owner_id', userId)
+      .single()
 
-  if (error || !data) {
-    console.error('Error deleting tenant:', error)
+    const { data, error } = await supabase
+      .from('tenants')
+      .delete()
+      .eq('id', tenantId)
+      .eq('owner_id', userId)
+      .select()
+      .single()
+
+    if (error || !data) {
+      logError(error, { operation: 'deleteTenant', userId, tenantId })
+      logOperation('deleteTenant', 'failed', { userId, tenantId })
+      return null
+    }
+    
+    // ✅ AUTO-UPDATE: Reset unit status to 'vacant' and unlink tenant
+    if (tenantData?.property_id && tenantData?.unit) {
+      const { data: unitsData } = await supabase
+        .from('units')
+        .select('id')
+        .eq('owner_id', userId)
+        .eq('property_id', tenantData.property_id)
+        .eq('unit_name', tenantData.unit)
+        .single()
+      
+      if (unitsData?.id) {
+        const { error: unitError } = await supabase
+          .from('units')
+          .update({ 
+            status: 'vacant',
+            tenant_id: null,
+            updated_at: now
+          })
+          .eq('id', unitsData.id)
+        
+        if (unitError) {
+          console.error('[WARN] Failed to reset unit status:', unitError)
+          // Don't fail the tenant deletion - just log the warning
+        } else {
+          console.log('[SUCCESS] Unit status reset to vacant, tenant unlinked')
+        }
+      }
+    }
+    
+    logOperation('deleteTenant', 'completed', { userId, tenantId })
+    return tenantFromDb(data)
+  } catch (err) {
+    logError(err, { operation: 'deleteTenant', userId, tenantId })
+    logOperation('deleteTenant', 'failed', { userId, tenantId })
     return null
   }
-  return tenantFromDb(data)
 }
 
 export async function deletePayment(userId: string, paymentId: string) {
@@ -735,17 +958,37 @@ export async function addUnit(userId: string, input: Omit<Unit, 'id' | 'tenantNa
     const now = new Date().toISOString()
     const unitId = id('unit')
 
-    const { data, error } = await supabase.from('units').insert({
+    const unitData: Database['public']['Tables']['units']['Insert'] = {
       id: unitId,
       owner_id: userId,
-      ...unitToDb(input),
+      property_id: input.propertyId,
+      unit_name: input.unitName,
+      unit_number: input.unitNumber || null,
+      rent_amount: input.rentAmount,
+      status: input.status,
+      tenant_id: input.tenantId || null,
+      notes: input.notes || null,
       created_at: now,
       updated_at: now,
-    }).select().single()
+    }
 
-    if (error || !data) {
+    console.log('[DEBUG] addUnit DB - owner_id value:', unitData.owner_id)
+
+    const { data, error } = await supabase
+      .from('units')
+      .insert([unitData])
+      .select()
+      .single()
+
+    if (error) {
       logError(error, { operation: 'addUnit', userId, input })
-      logOperation('addUnit', 'failed', { userId, unitName: input.unitName })
+      logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: error.message })
+      return null
+    }
+
+    if (!data) {
+      logError(new Error('No data returned from insert'), { operation: 'addUnit', userId, input })
+      logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: 'no_data_returned' })
       return null
     }
     
@@ -753,6 +996,7 @@ export async function addUnit(userId: string, input: Omit<Unit, 'id' | 'tenantNa
     return unitFromDb(data)
   } catch (err) {
     logError(err, { operation: 'addUnit', userId, input })
+    logOperation('addUnit', 'failed', { userId, unitName: input.unitName })
     return null
   }
 }

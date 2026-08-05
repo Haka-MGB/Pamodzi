@@ -7,16 +7,21 @@ import Modal from '@/components/ui/Modal'
 import { UserPlus, Search, ChevronRight, Mail, Phone, Send } from 'lucide-react'
 
 export default function TenantsPage() {
-  const { tenants, payments, properties, addTenant, updateTenant, deleteTenant, showToast } = useApp()
+  const { tenants, payments, properties, units, addTenant, updateTenant, deleteTenant, showToast } = useApp()
   const [search,   setSearch]   = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [addOpen,  setAddOpen]  = useState(false)
-  const [form, setForm] = useState({ name:'', unit:'', propertyId:'', propertyName:'', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+  const [form, setForm] = useState({ name:'', unitId:'', unit:'', propertyId:'', propertyName:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
   const [editOpen, setEditOpen] = useState(false)
   const [editForm, setEditForm] = useState({ name:'', unit:'', rent:'', email:'', phone:'', leaseEnd:'' })
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
+
+  // Get filtered units based on selected property
+  const filteredUnits = form.propertyId 
+    ? units.filter(u => u.propertyId === form.propertyId && u.status === 'vacant')
+    : []
 
   const filtered = tenants.filter(t =>
     t.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -28,8 +33,13 @@ export default function TenantsPage() {
   const tenantPayments = payments.filter(p => p.tenantId === selected)
 
   async function handleAdd() {
-    if (!form.name || !form.unit || !form.rent) { showToast('error', 'Name, unit and rent are required'); return }
+    if (!form.name || !form.unitId) { showToast('error', 'Name and unit are required'); return }
     if (!form.propertyId) { showToast('error', 'Please select a property'); return }
+    
+    // Get rent from the selected unit
+    const selectedUnit = units.find(u => u.id === form.unitId)
+    if (!selectedUnit) { showToast('error', 'Selected unit not found'); return }
+    
     if (!window.confirm(`Save ${form.name} as a new tenant?`)) return
     
     // Get current date for lease dates
@@ -43,12 +53,13 @@ export default function TenantsPage() {
       await addTenant({
         name: form.name, initials: form.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2),
         unit: form.unit, propertyId: form.propertyId, propertyName: form.propertyName,
-        rent: Number(form.rent), leaseStart: defaultLeaseStart, leaseEnd: defaultLeaseEnd,
+        rent: selectedUnit.rentAmount, // Get rent from unit
+        leaseStart: defaultLeaseStart, leaseEnd: defaultLeaseEnd,
         status: 'active', email: form.email, phone: form.phone,
       })
       showToast('success', `${form.name} added as a tenant.`)
       setAddOpen(false)
-      setForm({ name:'', unit:'', propertyId:'', propertyName:'', rent:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+      setForm({ name:'', unitId:'', unit:'', propertyId:'', propertyName:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Unable to save tenant.')
     }
@@ -183,15 +194,68 @@ export default function TenantsPage() {
         ) : (
           <div className="grid grid-cols-2 gap-4">
             <div className="field col-span-2"><label className="field-label">Full name *</label><input className="field-input" placeholder="e.g. Jane Smith" value={form.name} onChange={e => setForm(f=>({...f,name:e.target.value}))} /></div>
+            
             <div className="field">
               <label className="field-label">Property *</label>
-              <select className="field-select" value={form.propertyId} onChange={e => { const p=properties.find(x=>x.id===e.target.value); if(p) setForm(f=>({...f,propertyId:e.target.value,propertyName:p.name})) }}>
+              <select 
+                className="field-select" 
+                value={form.propertyId} 
+                onChange={e => { 
+                  const p = properties.find(x => x.id === e.target.value); 
+                  if (p) {
+                    setForm(f => ({
+                      ...f,
+                      propertyId: e.target.value,
+                      propertyName: p.name,
+                      unitId: '', // Reset unit when property changes
+                      unit: ''
+                    }))
+                  }
+                }}
+              >
                 <option value="">Select property...</option>
-                {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                {properties.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
-            <div className="field"><label className="field-label">Unit *</label><input className="field-input" placeholder="e.g. B3" value={form.unit} onChange={e => setForm(f=>({...f,unit:e.target.value}))} /></div>
-            <div className="field"><label className="field-label">Monthly rent (ZMW) *</label><input type="number" className="field-input" placeholder="2000" value={form.rent} onChange={e => setForm(f=>({...f,rent:e.target.value}))} /></div>
+
+            <div className="field">
+              <label className="field-label">Unit *</label>
+              <select 
+                className="field-select" 
+                value={form.unitId} 
+                onChange={e => { 
+                  const selectedUnit = units.find(u => u.id === e.target.value);
+                  if (selectedUnit) {
+                    const property = properties.find(p => p.id === selectedUnit.propertyId);
+                    setForm(f => ({
+                      ...f,
+                      unitId: selectedUnit.id,
+                      unit: selectedUnit.unitName,
+                      propertyId: selectedUnit.propertyId,
+                      propertyName: property?.name || ''
+                    }))
+                  }
+                }}
+                disabled={!form.propertyId}
+              >
+                <option value="">
+                  {!form.propertyId ? 'Select property first...' : 
+                   filteredUnits.length === 0 ? 'No vacant units available' : 
+                   'Select unit...'}
+                </option>
+                {filteredUnits.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.unitName} {u.unitNumber ? `(${u.unitNumber})` : ''} - {fmtK(u.rentAmount)}/mo
+                  </option>
+                ))}
+              </select>
+              {form.propertyId && filteredUnits.length === 0 && (
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  No vacant units. <button className="text-blue-500 hover:underline" onClick={() => { setAddOpen(false); window.location.href = '/properties' }}>Create units</button> for this property.
+                </p>
+              )}
+            </div>
+
             <div className="field"><label className="field-label">Phone</label><input className="field-input" placeholder="0977 000 000" value={form.phone} onChange={e => setForm(f=>({...f,phone:e.target.value}))} /></div>
             <div className="field col-span-2"><label className="field-label">Email</label><input type="email" className="field-input" placeholder="tenant@example.com" value={form.email} onChange={e => setForm(f=>({...f,email:e.target.value}))} /></div>
             <div className="field"><label className="field-label">Lease start</label><input type="date" className="field-input" value={form.leaseStart} onChange={e => setForm(f=>({...f,leaseStart:e.target.value}))} /></div>

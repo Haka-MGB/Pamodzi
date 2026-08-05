@@ -16,3 +16,16 @@ dist/
 build/
 .vercel
 .env*
+
+# Build artifacts
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Test files (keep in test-reports folder outside project)
+test-*.js
+*-test.js
+setup-*.js
+verify-*.js
+TEST_*.md
+TESTING_*.md
+CHANGES.md

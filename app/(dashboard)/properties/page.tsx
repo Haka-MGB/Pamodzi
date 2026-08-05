@@ -22,8 +22,6 @@ export default function PropertiesPage() {
     location: '',
     type: 'Residential',
     totalUnits: '8',
-    occupiedUnits: '0',
-    monthlyRevenue: '0',
   })
 
   const totalRevenue = properties.reduce((s, p) => s + p.monthlyRevenue, 0)
@@ -34,34 +32,30 @@ export default function PropertiesPage() {
   const managePropertyUnits = manageProperty ? units.filter(u => u.propertyId === manageProperty.id) : []
   const editProperty = properties.find(p => p.id === editId)
   const editingUnit = units.find(u => u.id === editingUnitId)
-  const [editForm, setEditForm] = useState({ name: '', location: '', type: 'Residential', totalUnits: '8', occupiedUnits: '0', monthlyRevenue: '0' })
+  const [editForm, setEditForm] = useState({ name: '', location: '', type: 'Residential', totalUnits: '8' })
   const [unitForm, setUnitForm] = useState({
     unitName: '',
-    unitNumber: '',
-    floor: '',
-    bedrooms: '0',
-    bathrooms: '0',
-    squareFeet: '',
     rentAmount: '0',
     status: 'vacant' as 'vacant' | 'occupied' | 'maintenance',
-    tenantId: '',
     notes: '',
   })
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
 
+  // Check if can add more units based on totalUnits limit
+  const canAddMoreUnits = (property: typeof manageProperty) => {
+    if (!property) return false
+    if (property.totalUnits === 0) return true // Unlimited
+    const existingCount = units.filter(u => u.propertyId === property.id).length
+    return existingCount < property.totalUnits
+  }
+
   function resetUnitForm() {
     setUnitForm({
       unitName: '',
-      unitNumber: '',
-      floor: '',
-      bedrooms: '0',
-      bathrooms: '0',
-      squareFeet: '',
       rentAmount: '0',
       status: 'vacant',
-      tenantId: '',
       notes: '',
     })
   }
@@ -76,14 +70,8 @@ export default function PropertiesPage() {
     setEditingUnitId(unit.id)
     setUnitForm({
       unitName: unit.unitName || '',
-      unitNumber: unit.unitNumber || '',
-      floor: unit.floor || '',
-      bedrooms: String(unit.bedrooms || 0),
-      bathrooms: String(unit.bathrooms || 0),
-      squareFeet: unit.squareFeet ? String(unit.squareFeet) : '',
       rentAmount: String(unit.rentAmount || 0),
       status: unit.status || 'vacant',
-      tenantId: unit.tenantId || '',
       notes: unit.notes || '',
     })
   }
@@ -95,22 +83,28 @@ export default function PropertiesPage() {
       return
     }
 
+    const rentAmount = Number(unitForm.rentAmount)
+    if (!Number.isFinite(rentAmount) || rentAmount < 0) {
+      showToast('error', 'Please enter a valid rent amount.')
+      return
+    }
+
     try {
       const payload = {
         propertyId: manageProperty.id,
         unitName: unitForm.unitName.trim(),
-        unitNumber: unitForm.unitNumber.trim() || undefined,
-        floor: unitForm.floor.trim() || undefined,
-        bedrooms: Number(unitForm.bedrooms) || undefined,
-        bathrooms: Number(unitForm.bathrooms) || undefined,
-        squareFeet: unitForm.squareFeet ? Number(unitForm.squareFeet) : undefined,
-        rentAmount: Number(unitForm.rentAmount) || 0,
+        rentAmount: rentAmount,
         status: unitForm.status,
-        tenantId: unitForm.tenantId || undefined,
         notes: unitForm.notes.trim() || undefined,
       }
 
       if (editingUnitId === 'new') {
+        // Check if can add more units
+        if (!canAddMoreUnits(manageProperty)) {
+          showToast('error', `Cannot add more units. This property has a limit of ${manageProperty.totalUnits} units.`)
+          return
+        }
+        
         await addUnit(payload)
         showToast('success', 'Unit added successfully.')
       } else {
@@ -148,68 +142,53 @@ export default function PropertiesPage() {
       <div className="space-y-3">
         <div className="field">
           <label className="field-label">Unit Name *</label>
-          <input className="field-input" value={unitForm.unitName} onChange={e => setUnitForm(f => ({ ...f, unitName: e.target.value }))} placeholder="e.g. Shop 1 - Front Entrance" />
+          <input 
+            className="field-input" 
+            value={unitForm.unitName} 
+            onChange={e => setUnitForm(f => ({ ...f, unitName: e.target.value }))} 
+            placeholder="e.g. Apartment 2A, Shop 1, House on the Left" 
+          />
         </div>
         
-        <div className="grid grid-cols-2 gap-3">
-          <div className="field">
-            <label className="field-label">Unit Number</label>
-            <input className="field-input" value={unitForm.unitNumber} onChange={e => setUnitForm(f => ({ ...f, unitNumber: e.target.value }))} placeholder="e.g. A1" />
-          </div>
-          <div className="field">
-            <label className="field-label">Floor</label>
-            <input className="field-input" value={unitForm.floor} onChange={e => setUnitForm(f => ({ ...f, floor: e.target.value }))} placeholder="e.g. Ground Floor" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div className="field">
-            <label className="field-label">Bedrooms</label>
-            <input type="number" min={0} className="field-input" value={unitForm.bedrooms} onChange={e => setUnitForm(f => ({ ...f, bedrooms: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="field-label">Bathrooms</label>
-            <input type="number" min={0} className="field-input" value={unitForm.bathrooms} onChange={e => setUnitForm(f => ({ ...f, bathrooms: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="field-label">Sq Ft</label>
-            <input type="number" min={0} className="field-input" value={unitForm.squareFeet} onChange={e => setUnitForm(f => ({ ...f, squareFeet: e.target.value }))} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="field">
-            <label className="field-label">Rent Amount</label>
-            <input type="number" min={0} className="field-input" value={unitForm.rentAmount} onChange={e => setUnitForm(f => ({ ...f, rentAmount: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label className="field-label">Status</label>
-            <select className="field-select" value={unitForm.status} onChange={e => setUnitForm(f => ({ ...f, status: e.target.value as typeof unitForm.status }))}>
-              <option value="vacant">Vacant</option>
-              <option value="occupied">Occupied</option>
-              <option value="maintenance">Maintenance</option>
-            </select>
-          </div>
+        <div className="field">
+          <label className="field-label">Rent Amount (ZMW) *</label>
+          <input 
+            type="number" 
+            min={0} 
+            className="field-input" 
+            value={unitForm.rentAmount} 
+            onChange={e => setUnitForm(f => ({ ...f, rentAmount: e.target.value }))} 
+            placeholder="e.g. 2000"
+          />
         </div>
 
         <div className="field">
-          <label className="field-label">Assign Tenant</label>
-          <select className="field-select" value={unitForm.tenantId} onChange={e => setUnitForm(f => ({ ...f, tenantId: e.target.value }))}>
-            <option value="">No tenant</option>
-            {tenants.filter(t => t.propertyId === manageProperty.id).map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
+          <label className="field-label">Status</label>
+          <select 
+            className="field-select" 
+            value={unitForm.status} 
+            onChange={e => setUnitForm(f => ({ ...f, status: e.target.value as typeof unitForm.status }))}
+          >
+            <option value="vacant">Vacant</option>
+            <option value="occupied">Occupied</option>
+            <option value="maintenance">Maintenance</option>
           </select>
         </div>
 
         <div className="field">
           <label className="field-label">Notes</label>
-          <textarea className="field-input" rows={2} value={unitForm.notes} onChange={e => setUnitForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional notes..." />
+          <textarea 
+            className="field-input" 
+            rows={2} 
+            value={unitForm.notes} 
+            onChange={e => setUnitForm(f => ({ ...f, notes: e.target.value }))} 
+            placeholder="Additional information about this unit..." 
+          />
         </div>
 
         <div className="flex gap-2">
           <button className="btn-primary btn flex-1" onClick={handleSaveUnit}>
-            <Check size={12} /> {editingUnitId === 'new' ? 'Add unit' : 'Save'}
+            <Check size={12} /> {editingUnitId === 'new' ? 'Add unit' : 'Save changes'}
           </button>
           <button className="btn" onClick={() => { setEditingUnitId(null); resetUnitForm() }}>
             <X size={12} /> Cancel
@@ -221,16 +200,14 @@ export default function PropertiesPage() {
 
   async function handleAddProperty() {
     const parsedTotal = Number(form.totalUnits)
-    const parsedOccupied = Number(form.occupiedUnits)
-    const parsedRevenue = Number(form.monthlyRevenue)
 
     if (!form.name.trim() || !form.location.trim()) {
       showToast('error', 'Property name and location are required.')
       return
     }
 
-    if (!Number.isFinite(parsedTotal) || !Number.isFinite(parsedOccupied) || !Number.isFinite(parsedRevenue) || parsedTotal < 1 || parsedOccupied < 0 || parsedOccupied > parsedTotal || parsedRevenue < 0) {
-      showToast('error', 'Check total and occupied unit counts.')
+    if (!Number.isFinite(parsedTotal) || parsedTotal < 1) {
+      showToast('error', 'Total units must be at least 1.')
       return
     }
 
@@ -242,12 +219,12 @@ export default function PropertiesPage() {
         location: form.location.trim(),
         type: form.type,
         totalUnits: parsedTotal,
-        occupiedUnits: parsedOccupied,
-        monthlyRevenue: parsedRevenue,
+        occupiedUnits: 0,        // ✅ Always start at 0 (will be calculated)
+        monthlyRevenue: 0,       // ✅ Always start at 0 (will be calculated)
       })
       showToast('success', `${form.name} added.`)
       setAddOpen(false)
-      setForm({ name: '', location: '', type: 'Residential', totalUnits: '8', occupiedUnits: '0', monthlyRevenue: '0' })
+      setForm({ name: '', location: '', type: 'Residential', totalUnits: '8' })
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Unable to save property.')
     }
@@ -311,7 +288,7 @@ export default function PropertiesPage() {
 
                 <div className="flex gap-2 mt-4">
                   <button className="btn btn-sm" onClick={() => setDetailId(p.id)}><Eye size={12}/> Details</button>
-                  <button className="btn btn-sm" onClick={() => { setEditId(p.id); setEditForm({ name: p.name, location: p.location, type: p.type, totalUnits: String(p.totalUnits), occupiedUnits: String(p.occupiedUnits), monthlyRevenue: String(p.monthlyRevenue) }); setEditOpen(true) }}><Settings2 size={12}/> Edit</button>
+                  <button className="btn btn-sm" onClick={() => { setEditId(p.id); setEditForm({ name: p.name, location: p.location, type: p.type, totalUnits: String(p.totalUnits) }); setEditOpen(true) }}><Settings2 size={12}/> Edit</button>
                   <button className="btn-primary btn btn-sm flex-1" onClick={() => setManageId(p.id)}><Settings2 size={12}/> Manage</button>
                   <button className="btn btn-sm" onClick={() => { setDeletingId(p.id); setDeletePassword(''); setDeleteConfirmOpen(true) }}>Delete</button>
                 </div>
@@ -365,19 +342,18 @@ export default function PropertiesPage() {
               {['Residential', 'Commercial Mix', 'Retail', 'Office', 'Industrial'].map(type => <option key={type}>{type}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="field">
-              <label className="field-label">Units</label>
-              <input type="number" min={1} className="field-input" value={form.totalUnits} onChange={e => setForm(f => ({ ...f, totalUnits: e.target.value }))} />
-            </div>
-            <div className="field">
-              <label className="field-label">Occupied</label>
-              <input type="number" min={0} className="field-input" value={form.occupiedUnits} onChange={e => setForm(f => ({ ...f, occupiedUnits: e.target.value }))} />
-            </div>
-            <div className="field">
-              <label className="field-label">Revenue</label>
-              <input type="number" min={0} className="field-input" value={form.monthlyRevenue} onChange={e => setForm(f => ({ ...f, monthlyRevenue: e.target.value }))} />
-            </div>
+          <div className="field">
+            <label className="field-label">Total Units *</label>
+            <input type="number" min={1} className="field-input" value={form.totalUnits} onChange={e => setForm(f => ({ ...f, totalUnits: e.target.value }))} placeholder="e.g. 8" />
+            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+              How many units does this property have?
+            </p>
+          </div>
+          <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              <strong>Note:</strong> Occupied units and monthly revenue will be automatically 
+              calculated based on the units you create and tenants you add.
+            </p>
           </div>
         </div>
       </Modal>
@@ -403,25 +379,54 @@ export default function PropertiesPage() {
         )}
       </Modal>
 
-      <Modal open={!!manageId} onClose={() => { setManageId(null); setEditingUnitId(null) }} title={manageProperty ? `Manage Units - ${manageProperty.name}` : 'Manage Units'} size="lg"
-        footer={<button className="btn-primary btn" onClick={() => { setManageId(null); setEditingUnitId(null) }}>Done</button>}>
+      <Modal open={!!manageId} onClose={() => { setManageId(null); setEditingUnitId(null); resetUnitForm() }} title={manageProperty ? `Manage Units - ${manageProperty.name}` : 'Manage Units'} size="lg"
+        footer={<button className="btn-primary btn" onClick={() => { setManageId(null); setEditingUnitId(null); resetUnitForm() }}>Done</button>}>
         {manageProperty && (
           <div className="space-y-3">
-            <div className="flex justify-end">
-              <button className="btn-primary btn btn-sm" onClick={openAddUnit}>
-                <Plus size={12} /> Add unit
-              </button>
+            {/* Unit Count Status */}
+            <div className="rounded-lg p-3" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-light)' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {managePropertyUnits.length} of {manageProperty.totalUnits === 0 ? '∞' : manageProperty.totalUnits} units created
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                    {managePropertyUnits.length === 0 && manageProperty.totalUnits > 0 && `Create ${manageProperty.totalUnits} units to match your property setup`}
+                    {managePropertyUnits.length > 0 && managePropertyUnits.length < manageProperty.totalUnits && `${manageProperty.totalUnits - managePropertyUnits.length} more units to create`}
+                    {managePropertyUnits.length > 0 && managePropertyUnits.length >= manageProperty.totalUnits && manageProperty.totalUnits > 0 && 'All units created. You can edit them below.'}
+                    {manageProperty.totalUnits === 0 && 'No limit - create as many units as needed'}
+                  </p>
+                </div>
+                {canAddMoreUnits(manageProperty) && !editingUnitId && (
+                  <button className="btn-primary btn btn-sm" onClick={openAddUnit}>
+                    <Plus size={12} /> Add unit
+                  </button>
+                )}
+              </div>
             </div>
 
-            {managePropertyUnits.length === 0 && (
+            {managePropertyUnits.length === 0 && !editingUnitId && (
               <div className="text-center py-8">
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No units created yet for this property.</p>
-                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Add the first unit to start tracking rent, occupancy, and tenants.</p>
+                <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: 'var(--bg-page)' }}>
+                  <DoorOpen size={32} style={{ color: 'var(--text-muted)' }} />
+                </div>
+                <p className="text-sm font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>No units created yet</p>
+                <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>
+                  {manageProperty.totalUnits > 0 
+                    ? `Start by creating your first unit. You need ${manageProperty.totalUnits} units total.`
+                    : 'Start by creating your first unit. You can add as many as you need.'}
+                </p>
+                {canAddMoreUnits(manageProperty) && (
+                  <button className="btn-primary btn" onClick={openAddUnit}>
+                    <Plus size={12} /> Create first unit
+                  </button>
+                )}
               </div>
             )}
 
             {editingUnitId === 'new' && (
               <div className="rounded-lg p-4" style={{ background: 'var(--bg-page)', border: '1px solid var(--border-light)' }}>
+                <h4 className="text-sm font-bold mb-3" style={{ color: 'var(--text-primary)' }}>Add New Unit</h4>
                 {renderUnitForm()}
               </div>
             )}
@@ -442,26 +447,17 @@ export default function PropertiesPage() {
                           {unit.unitNumber && (
                             <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Unit #{unit.unitNumber}</p>
                           )}
-                          {unit.floor && (
-                            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{unit.floor}</p>
-                          )}
                         </div>
                         <span className={`badge ${unit.status === 'occupied' ? 'badge-active' : unit.status === 'maintenance' ? 'badge-pending' : 'badge-low'}`}>
                           {unit.status}
                         </span>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
-                        {unit.bedrooms !== undefined && unit.bedrooms > 0 && (
-                          <div><span style={{ color: 'var(--text-muted)' }}>Bedrooms:</span> <strong>{unit.bedrooms}</strong></div>
-                        )}
-                        {unit.bathrooms !== undefined && unit.bathrooms > 0 && (
-                          <div><span style={{ color: 'var(--text-muted)' }}>Bathrooms:</span> <strong>{unit.bathrooms}</strong></div>
-                        )}
-                        {unit.squareFeet && (
-                          <div><span style={{ color: 'var(--text-muted)' }}>Sq Ft:</span> <strong>{unit.squareFeet}</strong></div>
-                        )}
-                        <div><span style={{ color: 'var(--text-muted)' }}>Rent:</span> <strong>{fmtK(unit.rentAmount)}</strong></div>
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>Rent Amount:</span>
+                          <strong className="text-sm" style={{ color: 'var(--text-primary)' }}>{fmtK(unit.rentAmount)}/month</strong>
+                        </div>
                       </div>
 
                       {tenant && (
@@ -476,7 +472,7 @@ export default function PropertiesPage() {
 
                       {unit.notes && (
                         <p className="text-xs mb-3 p-2 rounded" style={{ background: 'var(--bg-card)', color: 'var(--text-muted)' }}>
-                          {unit.notes}
+                          <strong>Notes:</strong> {unit.notes}
                         </p>
                       )}
 
@@ -485,11 +481,16 @@ export default function PropertiesPage() {
                           <Edit3 size={12} /> Edit
                         </button>
                         <button className="btn btn-sm" onClick={() => handleDeleteUnit(unit.id, unit.unitName || 'this unit')}>
-                          <Trash2 size={12} />
+                          <Trash2 size={12} /> Delete
                         </button>
                       </div>
                     </div>
-                  ) : renderUnitForm()}
+                  ) : (
+                    <div>
+                      <h4 className="text-sm font-bold mb-3" style={{ color: 'var(--text-primary)' }}>Edit Unit</h4>
+                      {renderUnitForm()}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -501,21 +502,23 @@ export default function PropertiesPage() {
         footer={<><button className="btn" onClick={() => { setEditOpen(false); setEditId(null) }}>Cancel</button><button className="btn-primary btn" onClick={async () => {
           if (!editProperty) return
           const parsedTotal = Number(editForm.totalUnits)
-          const parsedOccupied = Number(editForm.occupiedUnits)
-          const parsedRevenue = Number(editForm.monthlyRevenue)
           if (!editForm.name.trim() || !editForm.location.trim()) {
             showToast('error', 'Property name and location are required.')
             return
           }
-          if (!Number.isFinite(parsedTotal) || !Number.isFinite(parsedOccupied) || !Number.isFinite(parsedRevenue) || parsedTotal < 1 || parsedOccupied < 0 || parsedOccupied > parsedTotal || parsedRevenue < 0) {
-            showToast('error', 'Check total and occupied unit counts.')
+          if (!Number.isFinite(parsedTotal) || parsedTotal < 1) {
+            showToast('error', 'Total units must be at least 1.')
             return
           }
           if (!window.confirm(`Save changes for ${editForm.name}?`)) return
           try {
             await updateProperty(editProperty.id, {
-              name: editForm.name.trim(), location: editForm.location.trim(), type: editForm.type,
-              totalUnits: parsedTotal, occupiedUnits: parsedOccupied, monthlyRevenue: parsedRevenue,
+              name: editForm.name.trim(), 
+              location: editForm.location.trim(), 
+              type: editForm.type,
+              totalUnits: parsedTotal,
+              occupiedUnits: editProperty.occupiedUnits, // Keep existing (will be recalculated on load)
+              monthlyRevenue: editProperty.monthlyRevenue, // Keep existing (will be recalculated on load)
             })
             showToast('success', `${editForm.name} updated.`)
             setEditOpen(false)
@@ -539,19 +542,14 @@ export default function PropertiesPage() {
                 {['Residential', 'Commercial Mix', 'Retail', 'Office', 'Industrial'].map(type => <option key={type}>{type}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="field">
-                <label className="field-label">Units</label>
-                <input type="number" min={1} className="field-input" value={editForm.totalUnits} onChange={e => setEditForm(f => ({ ...f, totalUnits: e.target.value }))} />
-              </div>
-              <div className="field">
-                <label className="field-label">Occupied</label>
-                <input type="number" min={0} className="field-input" value={editForm.occupiedUnits} onChange={e => setEditForm(f => ({ ...f, occupiedUnits: e.target.value }))} />
-              </div>
-              <div className="field">
-                <label className="field-label">Revenue</label>
-                <input type="number" min={0} className="field-input" value={editForm.monthlyRevenue} onChange={e => setEditForm(f => ({ ...f, monthlyRevenue: e.target.value }))} />
-              </div>
+            <div className="field">
+              <label className="field-label">Total Units *</label>
+              <input type="number" min={1} className="field-input" value={editForm.totalUnits} onChange={e => setEditForm(f => ({ ...f, totalUnits: e.target.value }))} />
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-light)' }}>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                <strong>Note:</strong> Occupied units and monthly revenue are automatically calculated and cannot be edited manually.
+              </p>
             </div>
           </div>
         )}
