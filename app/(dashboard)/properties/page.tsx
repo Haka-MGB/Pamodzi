@@ -169,10 +169,11 @@ export default function PropertiesPage() {
             value={unitForm.status} 
             onChange={e => setUnitForm(f => ({ ...f, status: e.target.value as typeof unitForm.status }))}
           >
-            <option value="vacant">Vacant</option>
-            <option value="occupied">Occupied</option>
             <option value="maintenance">Maintenance</option>
           </select>
+          <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+            Vacant and occupied are derived automatically from whether a tenant is assigned.
+          </p>
         </div>
 
         <div className="field">

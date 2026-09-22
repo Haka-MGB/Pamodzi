@@ -10,8 +10,7 @@ import { parseLoginInput } from '@/lib/server/validation'
 export async function POST(request: NextRequest) {
   if (!requireSameOrigin(request)) return fail('Invalid request origin.', 403)
   
-  const key = `login:${request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'local'}`
-  if (!rateLimit(key, 8, 60_000)) return fail('Too many login attempts. Try again shortly.', 429)
+  if (!rateLimit('login:global', 8, 60_000)) return fail('Too many login attempts. Try again shortly.', 429)
 
   const input = parseLoginInput(await readJson(request))
   if (!input) return fail('Enter a valid email and password.')

@@ -1,4 +1,4 @@
-import type { IssuePriority, IssueStatus, PaymentStatus, Property, Tenant } from '@/types'
+import type { IssuePriority, IssueStatus, PaymentStatus, Property, Tenant, Unit } from '@/types'
 
 export interface RegisterInput {
   name: string
@@ -87,6 +87,9 @@ export function parsePropertyUpdates(value: Record<string, unknown> | null) {
 
 export function parseTenant(value: Partial<Tenant> | null) {
   if (!value) return null
+  const sex = normalizeSex(value.sex)
+  if (!sex) return null
+
   const tenant = {
     name: cleanText(value.name),
     initials: cleanText(value.initials, 4),
@@ -99,21 +102,25 @@ export function parseTenant(value: Partial<Tenant> | null) {
     status: normalizeEnum(value.status, ['active', 'overdue', 'vacating'] as const, 'active'),
     email: cleanEmail(value.email),
     phone: cleanText(value.phone, 40),
+    nrc: normalizeNrc(value.nrc),
+    sex,
   }
   if (!tenant.name || !tenant.unit || !tenant.propertyId || tenant.rent < 0) return null
   if (tenant.email && !isEmail(tenant.email)) return null
+  if (!tenant.nrc) return null
+  if (!tenant.sex) return null
   
   // Validate lease dates
   if (tenant.leaseStart && tenant.leaseEnd) {
     const start = new Date(tenant.leaseStart)
     const end = new Date(tenant.leaseEnd)
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new Error('Invalid lease dates provided.')
+      return null
     }
-   if (end < start) {
-  throw new Error('Lease end date must be after start date.')
+    if (end < start) {
+      return null
     }
-}
+  }
   
   return tenant
 }
@@ -132,10 +139,29 @@ export function parseTenantUpdates(value: Record<string, unknown> | null) {
   if (value.status !== undefined) updates.status = normalizeEnum(value.status, ['active', 'overdue', 'vacating'] as const, 'active')
   if (value.email !== undefined) updates.email = cleanEmail(value.email)
   if (value.phone !== undefined) updates.phone = cleanText(value.phone, 40)
+  if (value.nrc !== undefined) updates.nrc = normalizeNrc(value.nrc)
+  if (value.sex !== undefined) {
+    const normalizedSex = normalizeSex(value.sex)
+    if (!normalizedSex) return null
+    updates.sex = normalizedSex
+  }
 
   if (updates.rent !== undefined && updates.rent < 0) return null
   if (updates.email !== undefined && updates.email && !isEmail(updates.email)) return null
+  if (updates.nrc !== undefined && !updates.nrc) return null
   return updates
+}
+
+function normalizeNrc(value: unknown) {
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim().toUpperCase()
+  return /^[0-9]{6}\/[0-9]{2}\/[0-9]$/.test(normalized) ? normalized : ''
+}
+
+function normalizeSex(value: unknown): Tenant['sex'] | undefined {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (normalized === 'male' || normalized === 'female') return normalized
+  return undefined
 }
 
 export function parsePayment(value: Record<string, unknown> | null) {
@@ -151,8 +177,24 @@ export function parsePayment(value: Record<string, unknown> | null) {
     date: cleanText(value.date, 40),
     period: cleanText(value.period, 40),
   }
-  if (!payment.tenantId || !payment.tenant || !payment.ref || payment.amount < 0) return null
+  if (!payment.tenantId || !payment.tenant || !payment.ref || payment.amount <= 0) return null
   return payment
+}
+
+export function parseUnit(value: Record<string, unknown> | null) {
+  if (!value) return null
+  const unit = {
+    propertyId: cleanText(value.propertyId, 60),
+    unitName: cleanText(value.unitName, 120),
+    unitNumber: cleanText(value.unitNumber, 60) || undefined,
+    rentAmount: Number(value.rentAmount),
+    status: value.status,
+    tenantId: cleanText(value.tenantId, 60) || undefined,
+    notes: cleanText(value.notes, 1000) || undefined,
+  }
+  if (!unit.propertyId || !unit.unitName || !Number.isFinite(unit.rentAmount) || unit.rentAmount < 0) return null
+  if (!['vacant', 'occupied', 'maintenance'].includes(unit.status as string)) return null
+  return unit as Omit<Unit, 'id'>
 }
 
 export function parseIssue(value: Record<string, unknown> | null) {

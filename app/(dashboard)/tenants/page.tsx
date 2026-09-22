@@ -11,16 +11,17 @@ export default function TenantsPage() {
   const [search,   setSearch]   = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [addOpen,  setAddOpen]  = useState(false)
-  const [form, setForm] = useState({ name:'', unitId:'', unit:'', propertyId:'', propertyName:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+  const [form, setForm] = useState({ name:'', unitId:'', unit:'', propertyId:'', propertyName:'', email:'', phone:'', nrc:'', sex:'male' as 'male' | 'female', leaseStart:'', leaseEnd:'' })
   const [editOpen, setEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState({ name:'', unit:'', rent:'', email:'', phone:'', leaseEnd:'' })
+  const [editForm, setEditForm] = useState({ name:'', unit:'', rent:'', email:'', phone:'', nrc:'', sex:'male' as 'male' | 'female', leaseEnd:'' })
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deletePassword, setDeletePassword] = useState('')
 
-  // Get filtered units based on selected property
-  const filteredUnits = form.propertyId 
-    ? units.filter(u => u.propertyId === form.propertyId && u.status === 'vacant')
+  // Rare multi-tenant / multi-unit cases are allowed, so units are not restricted to
+  // only currently vacant entries when assigning a new tenant.
+  const filteredUnits = form.propertyId
+    ? units.filter(u => u.propertyId === form.propertyId)
     : []
 
   const filtered = tenants.filter(t =>
@@ -53,13 +54,14 @@ export default function TenantsPage() {
       await addTenant({
         name: form.name, initials: form.name.split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2),
         unit: form.unit, propertyId: form.propertyId, propertyName: form.propertyName,
-        rent: selectedUnit.rentAmount, // Get rent from unit
+        rent: selectedUnit.rentAmount,
         leaseStart: defaultLeaseStart, leaseEnd: defaultLeaseEnd,
         status: 'active', email: form.email, phone: form.phone,
+        nrc: form.nrc.toUpperCase(), sex: form.sex,
       })
       showToast('success', `${form.name} added as a tenant.`)
       setAddOpen(false)
-      setForm({ name:'', unitId:'', unit:'', propertyId:'', propertyName:'', email:'', phone:'', leaseStart:'', leaseEnd:'' })
+      setForm({ name:'', unitId:'', unit:'', propertyId:'', propertyName:'', email:'', phone:'', nrc:'', sex:'male', leaseStart:'', leaseEnd:'' })
     } catch (error) {
       showToast('error', error instanceof Error ? error.message : 'Unable to save tenant.')
     }
@@ -68,7 +70,7 @@ export default function TenantsPage() {
   async function handleUpdateTenant(id: string) {
     if (!window.confirm(`Save changes for ${editForm.name}?`)) return
     try {
-      await updateTenant(id, { name: editForm.name.trim(), unit: editForm.unit.trim(), rent: Number(editForm.rent), email: editForm.email.trim(), phone: editForm.phone.trim(), leaseEnd: editForm.leaseEnd || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0] })
+      await updateTenant(id, { name: editForm.name.trim(), unit: editForm.unit.trim(), rent: Number(editForm.rent), email: editForm.email.trim(), phone: editForm.phone.trim(), nrc: editForm.nrc.trim().toUpperCase(), sex: editForm.sex, leaseEnd: editForm.leaseEnd || new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0] })
       showToast('success', `${editForm.name} updated.`)
       setEditOpen(false)
       setSelected(null)
@@ -129,7 +131,7 @@ export default function TenantsPage() {
         <Modal open={!!selected} onClose={() => setSelected(null)} title={tenantDetail.name}
           footer={<>
             <button className="btn" onClick={() => setSelected(null)}>Close</button>
-            <button className="btn" onClick={() => { setEditForm({ name: tenantDetail.name, unit: tenantDetail.unit, rent: String(tenantDetail.rent), email: tenantDetail.email || '', phone: tenantDetail.phone || '', leaseEnd: tenantDetail.leaseEnd }); setEditOpen(true) }}>Edit</button>
+            <button className="btn" onClick={() => { setEditForm({ name: tenantDetail.name, unit: tenantDetail.unit, rent: String(tenantDetail.rent), email: tenantDetail.email || '', phone: tenantDetail.phone || '', nrc: tenantDetail.nrc || '', sex: tenantDetail.sex || 'male', leaseEnd: tenantDetail.leaseEnd }); setEditOpen(true) }}>Edit</button>
             <button className="btn-primary btn" onClick={() => { showToast('success', `Reminder sent to ${tenantDetail.name}.`); setSelected(null) }}>
               <Send size={13} /> Send reminder
             </button>
@@ -150,6 +152,8 @@ export default function TenantsPage() {
               ['Lease end',    tenantDetail.leaseEnd],
               ['Phone',        tenantDetail.phone],
               ['Email',        tenantDetail.email],
+              ['NRC',         tenantDetail.nrc],
+              ['Sex',         tenantDetail.sex === 'male' ? 'Male' : 'Female'],
             ].map(([k,v]) => (
               <div key={k}>
                 <p className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{k}</p>
@@ -178,7 +182,9 @@ export default function TenantsPage() {
             <div className="field"><label className="field-label">Unit *</label><input className="field-input" value={editForm.unit} onChange={e => setEditForm(f => ({ ...f, unit: e.target.value }))} /></div>
             <div className="field"><label className="field-label">Monthly rent (ZMW) *</label><input type="number" className="field-input" value={editForm.rent} onChange={e => setEditForm(f => ({ ...f, rent: e.target.value }))} /></div>
             <div className="field"><label className="field-label">Phone</label><input className="field-input" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
+            <div className="field"><label className="field-label">Sex</label><select className="field-select" value={editForm.sex} onChange={e => setEditForm(f => ({ ...f, sex: e.target.value as 'male' | 'female' }))}><option value="male">Male</option><option value="female">Female</option></select></div>
             <div className="field col-span-2"><label className="field-label">Email</label><input className="field-input" value={editForm.email} onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))} /></div>
+            <div className="field col-span-2"><label className="field-label">NRC</label><input className="field-input" value={editForm.nrc} onChange={e => setEditForm(f => ({ ...f, nrc: e.target.value }))} /></div>
             <div className="field"><label className="field-label">Lease end</label><input type="date" className="field-input" value={editForm.leaseEnd} onChange={e => setEditForm(f => ({ ...f, leaseEnd: e.target.value }))} /></div>
           </div>
         </Modal>
@@ -251,13 +257,15 @@ export default function TenantsPage() {
               </select>
               {form.propertyId && filteredUnits.length === 0 && (
                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                  No vacant units. <button className="text-blue-500 hover:underline" onClick={() => { setAddOpen(false); window.location.href = '/properties' }}>Create units</button> for this property.
+                  No units are available in this property yet. <button className="text-blue-500 hover:underline" onClick={() => { setAddOpen(false); window.location.href = '/properties' }}>Create units</button> for this property.
                 </p>
               )}
             </div>
 
             <div className="field"><label className="field-label">Phone</label><input className="field-input" placeholder="0977 000 000" value={form.phone} onChange={e => setForm(f=>({...f,phone:e.target.value}))} /></div>
+            <div className="field"><label className="field-label">Sex *</label><select className="field-select" value={form.sex} onChange={e => setForm(f => ({ ...f, sex: e.target.value as 'male' | 'female' }))}><option value="male">Male</option><option value="female">Female</option></select></div>
             <div className="field col-span-2"><label className="field-label">Email</label><input type="email" className="field-input" placeholder="tenant@example.com" value={form.email} onChange={e => setForm(f=>({...f,email:e.target.value}))} /></div>
+            <div className="field col-span-2"><label className="field-label">NRC *</label><input className="field-input" placeholder="830285/10/1" value={form.nrc} onChange={e => setForm(f => ({ ...f, nrc: e.target.value }))} /></div>
             <div className="field"><label className="field-label">Lease start</label><input type="date" className="field-input" value={form.leaseStart} onChange={e => setForm(f=>({...f,leaseStart:e.target.value}))} /></div>
             <div className="field"><label className="field-label">Lease end</label><input type="date" className="field-input" value={form.leaseEnd} onChange={e => setForm(f=>({...f,leaseEnd:e.target.value}))} /></div>
           </div>

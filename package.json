@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:smoke": "node smoke-test.mjs",
+    "test:e2e": "node e2e-test.mjs",
+    "test": "npm run test:smoke && npm run test:e2e"
+    
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

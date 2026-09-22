@@ -125,6 +125,8 @@ function isTenant(value: unknown): value is Tenant {
     && isOneOf(value.status, ['active', 'overdue', 'vacating'] as const)
     && isString(value.email)
     && isString(value.phone)
+    && isString(value.nrc)
+    && isOneOf(value.sex, ['male', 'female'] as const)
 }
 
 function isPayment(value: unknown): value is Payment {
@@ -360,20 +362,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNotifications(safeArray(nextNotifications, isNotification))
   }, [])
 
+  const recomputePropertySummaries = useCallback((nextUnits: Unit[]) => {
+    setProperties(prev => prev.map(property => {
+      const propertyUnits = nextUnits.filter(unit => unit.propertyId === property.id)
+      const occupiedUnits = propertyUnits.filter(unit => unit.status === 'occupied').length
+      const monthlyRevenue = propertyUnits
+        .filter(unit => unit.status === 'occupied')
+        .reduce((sum, unit) => sum + unit.rentAmount, 0)
+
+      return {
+        ...property,
+        totalUnits: propertyUnits.length,
+        occupiedUnits,
+        monthlyRevenue,
+      }
+    }))
+  }, [])
+
   const addUnit = useCallback(async (u: Omit<Unit, 'id' | 'tenantName' | 'tenantEmail' | 'tenantPhone'>) => {
     const unit = requireApiItem(await apiPost<Unit>('/api/units', u), isUnit, 'Unable to add unit.')
-    setUnits(prev => [unit, ...prev])
-  }, [])
+    const nextUnits = [unit, ...units]
+    setUnits(nextUnits)
+    recomputePropertySummaries(nextUnits)
+  }, [recomputePropertySummaries, units])
 
   const updateUnit = useCallback(async (id: string, updates: Partial<Unit>) => {
     const unit = requireApiItem(await apiPatch<Unit>(`/api/units/${id}`, updates), isUnit, 'Unable to update unit.')
-    setUnits(prev => prev.map(u => u.id === id ? unit : u))
-  }, [])
+    const nextUnits = units.map(u => u.id === id ? unit : u)
+    setUnits(nextUnits)
+    recomputePropertySummaries(nextUnits)
+  }, [recomputePropertySummaries, units])
 
   const deleteUnit = useCallback(async (id: string) => {
     await apiDelete(`/api/units/${id}`)
-    setUnits(prev => prev.filter(u => u.id !== id))
-  }, [])
+    const nextUnits = units.filter(u => u.id !== id)
+    setUnits(nextUnits)
+    recomputePropertySummaries(nextUnits)
+  }, [recomputePropertySummaries, units])
 
   const getUnitsByProperty = useCallback((propertyId: string) => {
     return units.filter(u => u.propertyId === propertyId)

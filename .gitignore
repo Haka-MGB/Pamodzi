@@ -16,6 +16,10 @@ dist/
 build/
 .vercel
 .env*
+#my files 
+.kiro/
+.docs/
+.output.txt
 
 # Build artifacts
 tsconfig.tsbuildinfo

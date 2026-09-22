@@ -1,8 +1,8 @@
 -- Pamodzi Database Schema for Supabase
--- Run this SQL in your Supabase SQL Editor to create all necessary tables
+-- Clean setup for the app. No hardcoded users are inserted.
+-- Create users through the app registration flow only.
 
--- Users table
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS public.users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -12,32 +12,33 @@ CREATE TABLE IF NOT EXISTS users (
   company TEXT NOT NULL,
   initials TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Properties table
-CREATE TABLE IF NOT EXISTS properties (
+CREATE TABLE IF NOT EXISTS public.properties (
   id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   location TEXT NOT NULL,
   type TEXT NOT NULL,
-  total_units INTEGER NOT NULL,
-  occupied_units INTEGER NOT NULL,
-  monthly_revenue DECIMAL(12,2) NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  total_units INTEGER NOT NULL DEFAULT 0,
+  occupied_units INTEGER NOT NULL DEFAULT 0,
+  monthly_revenue DECIMAL(12,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Tenants table
-CREATE TABLE IF NOT EXISTS tenants (
+CREATE UNIQUE INDEX IF NOT EXISTS idx_properties_unique_record
+  ON public.properties(owner_id, lower(name), lower(location), lower(type));
+
+CREATE TABLE IF NOT EXISTS public.tenants (
   id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   initials TEXT NOT NULL,
   unit TEXT NOT NULL,
-  property_id TEXT NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+  property_id TEXT NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
   property_name TEXT NOT NULL,
   rent DECIMAL(12,2) NOT NULL,
   lease_start TEXT NOT NULL,
@@ -45,15 +46,38 @@ CREATE TABLE IF NOT EXISTS tenants (
   status TEXT NOT NULL,
   email TEXT NOT NULL,
   phone TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  nrc TEXT NOT NULL,
+  sex TEXT NOT NULL CHECK (sex IN ('male', 'female')),
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Payments table
-CREATE TABLE IF NOT EXISTS payments (
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_owner_email_unique ON public.tenants(owner_id, lower(email));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_owner_phone_unique ON public.tenants(owner_id, phone);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_owner_nrc_unique ON public.tenants(owner_id, nrc);
+
+CREATE TABLE IF NOT EXISTS public.units (
   id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  property_id TEXT NOT NULL REFERENCES public.properties(id) ON DELETE CASCADE,
+  unit_name TEXT NOT NULL,
+  unit_number TEXT,
+  floor TEXT,
+  bedrooms INTEGER DEFAULT 0,
+  bathrooms INTEGER DEFAULT 0,
+  square_feet INTEGER,
+  rent_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'vacant' CHECK (status IN ('vacant', 'occupied', 'maintenance')),
+  tenant_id TEXT REFERENCES public.tenants(id) ON DELETE SET NULL,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.payments (
+  id TEXT PRIMARY KEY,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  tenant_id TEXT NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   tenant TEXT NOT NULL,
   unit TEXT NOT NULL,
   amount DECIMAL(12,2) NOT NULL,
@@ -62,18 +86,20 @@ CREATE TABLE IF NOT EXISTS payments (
   status TEXT NOT NULL,
   date TEXT NOT NULL,
   period TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Issues (Maintenance) table
-CREATE TABLE IF NOT EXISTS issues (
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_unique_record
+  ON public.payments(owner_id, tenant_id, lower(ref), amount, date, lower(period), lower(method));
+
+CREATE TABLE IF NOT EXISTS public.issues (
   id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
   tenant TEXT NOT NULL,
-  tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  tenant_id TEXT NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   unit TEXT NOT NULL,
   category TEXT NOT NULL,
   status TEXT NOT NULL,
@@ -81,74 +107,63 @@ CREATE TABLE IF NOT EXISTS issues (
   date TEXT NOT NULL,
   assignee TEXT,
   icon TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Notifications table
-CREATE TABLE IF NOT EXISTS notifications (
+CREATE UNIQUE INDEX IF NOT EXISTS idx_issues_unique_record
+  ON public.issues(owner_id, tenant_id, lower(title), lower(description), lower(unit), lower(category), date);
+
+CREATE TABLE IF NOT EXISTS public.notifications (
   id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   type TEXT NOT NULL,
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   time TEXT NOT NULL,
   read BOOLEAN NOT NULL DEFAULT FALSE,
   link TEXT,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Activity table
-CREATE TABLE IF NOT EXISTS activity (
+CREATE TABLE IF NOT EXISTS public.activity (
   id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   type TEXT NOT NULL,
   icon TEXT NOT NULL,
   text TEXT NOT NULL,
   time TEXT NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Revenue Data table
-CREATE TABLE IF NOT EXISTS revenue_data (
+CREATE TABLE IF NOT EXISTS public.revenue_data (
   id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  owner_id TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   month TEXT NOT NULL,
   parklands DECIMAL(12,2) NOT NULL,
   ndola DECIMAL(12,2) NOT NULL,
   cbd DECIMAL(12,2) NOT NULL,
   total DECIMAL(12,2) NOT NULL,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
--- Create indexes for better performance
-CREATE INDEX idx_properties_owner_id ON properties(owner_id);
-CREATE INDEX idx_tenants_owner_id ON tenants(owner_id);
-CREATE INDEX idx_tenants_property_id ON tenants(property_id);
-CREATE INDEX idx_payments_owner_id ON payments(owner_id);
-CREATE INDEX idx_payments_tenant_id ON payments(tenant_id);
-CREATE INDEX idx_issues_owner_id ON issues(owner_id);
-CREATE INDEX idx_issues_tenant_id ON issues(tenant_id);
-CREATE INDEX idx_notifications_owner_id ON notifications(owner_id);
-CREATE INDEX idx_activity_owner_id ON activity(owner_id);
-CREATE INDEX idx_revenue_data_owner_id ON revenue_data(owner_id);
+CREATE INDEX IF NOT EXISTS idx_properties_owner_id ON public.properties(owner_id);
+CREATE INDEX IF NOT EXISTS idx_tenants_owner_id ON public.tenants(owner_id);
+CREATE INDEX IF NOT EXISTS idx_tenants_property_id ON public.tenants(property_id);
+CREATE INDEX IF NOT EXISTS idx_units_owner_id ON public.units(owner_id);
+CREATE INDEX IF NOT EXISTS idx_units_property_id ON public.units(property_id);
+CREATE INDEX IF NOT EXISTS idx_units_tenant_id ON public.units(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_units_status ON public.units(status);
+CREATE INDEX IF NOT EXISTS idx_payments_owner_id ON public.payments(owner_id);
+CREATE INDEX IF NOT EXISTS idx_payments_tenant_id ON public.payments(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_issues_owner_id ON public.issues(owner_id);
+CREATE INDEX IF NOT EXISTS idx_issues_tenant_id ON public.issues(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_owner_id ON public.notifications(owner_id);
+CREATE INDEX IF NOT EXISTS idx_activity_owner_id ON public.activity(owner_id);
+CREATE INDEX IF NOT EXISTS idx_revenue_data_owner_id ON public.revenue_data(owner_id);
 
--- Create test user (email: testuser@example.com, password: password123)
-INSERT INTO users (id, name, email, role, location, phone, company, initials, password_hash, created_at, updated_at)
-VALUES (
-  'u_' || gen_random_uuid()::text,
-  'Test User',
-  'testuser@example.com',
-  'Landlord',
-  'Zambia',
-  '+260000000000',
-  'Pamodzi',
-  'TU',
-  '$2b$10$k4DzMN4Kd7RXCgKRR.qNeOF6B1TQ5Xr5OQ6E5qXqUGbRiY6iVp4sC', -- password123 hashed with bcrypt
-  NOW(),
-  NOW()
-)
-ON CONFLICT (email) DO NOTHING;
+-- No demo account seed. Users are created through the app registration flow.
+-- This keeps the database clean and production-safe.

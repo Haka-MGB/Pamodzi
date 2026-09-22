@@ -4,6 +4,7 @@ export type PaymentStatus = 'paid' | 'pending' | 'overdue'
 export type IssueStatus   = 'open' | 'in-progress' | 'resolved'
 export type IssuePriority = 'urgent' | 'high' | 'medium' | 'low'
 export type TenantStatus  = 'active' | 'overdue' | 'vacating'
+export type TenantSex     = 'male' | 'female'
 export type UnitStatus    = 'vacant' | 'occupied' | 'maintenance'
 
 export interface User {
@@ -32,10 +33,6 @@ export interface Unit {
   propertyId: string
   unitName: string
   unitNumber?: string
-  floor?: string
-  bedrooms?: number
-  bathrooms?: number
-  squareFeet?: number
   rentAmount: number
   status: UnitStatus
   tenantId?: string
@@ -58,6 +55,8 @@ export interface Tenant {
   status: TenantStatus
   email: string
   phone: string
+  nrc: string
+  sex: TenantSex
 }
 
 export interface Payment {

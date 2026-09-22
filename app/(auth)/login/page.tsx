@@ -171,7 +171,7 @@ export default function LoginPage() {
       return
     }
 
-    setError('Invalid email or password. Check the demo credentials and try again.')
+    setError('Invalid email or password. please try again with correct credentials.')
   }
 
   return (
@@ -263,7 +263,7 @@ export default function LoginPage() {
                 onChange={e => setTermsAccepted(e.target.checked)}
                 className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#D1C9B8] accent-[#2D6A4F]"
               />
-              I agree to use Pamodzi for authorised property management activity and understand this demo account is stored locally in this browser.
+              I agree to use Pamodzi for authorised property management activity.
             </label>
           )}
 

@@ -9,8 +9,7 @@ import { parseRegisterInput } from '@/lib/server/validation'
 
 export async function POST(request: NextRequest) {
   if (!requireSameOrigin(request)) return fail('Invalid request origin.', 403)
-  const key = `register:${request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? 'local'}`
-  if (!rateLimit(key, 4, 60_000)) return fail('Too many account attempts. Try again shortly.', 429)
+  if (!rateLimit('register:global', 4, 60_000)) return fail('Too many account attempts. Try again shortly.', 429)
 
   const input = parseRegisterInput(await readJson(request))
   if (!input) return fail('Check your account details. Passwords must be at least 8 characters.')

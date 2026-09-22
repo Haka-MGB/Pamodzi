@@ -15,10 +15,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   
   if (input.unitName !== undefined) updates.unitName = input.unitName
   if (input.unitNumber !== undefined) updates.unitNumber = input.unitNumber
-  if (input.floor !== undefined) updates.floor = input.floor
-  if (input.bedrooms !== undefined) updates.bedrooms = input.bedrooms
-  if (input.bathrooms !== undefined) updates.bathrooms = input.bathrooms
-  if (input.squareFeet !== undefined) updates.squareFeet = input.squareFeet
   if (input.rentAmount !== undefined) updates.rentAmount = input.rentAmount
   if (input.status !== undefined) updates.status = input.status
   if (input.tenantId !== undefined) updates.tenantId = input.tenantId

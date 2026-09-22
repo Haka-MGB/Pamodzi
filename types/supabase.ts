@@ -98,6 +98,8 @@ export type Database = {
           status: string
           email: string
           phone: string
+          nrc: string
+          sex: string
           created_at: string
           updated_at: string
         }
@@ -115,6 +117,8 @@ export type Database = {
           status: string
           email: string
           phone: string
+          nrc: string
+          sex: string
           created_at?: string
           updated_at?: string
         }
@@ -132,6 +136,8 @@ export type Database = {
           status?: string
           email?: string
           phone?: string
+          nrc?: string
+          sex?: string
           created_at?: string
           updated_at?: string
         }
