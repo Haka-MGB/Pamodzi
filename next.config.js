@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const isProduction = process.env.NODE_ENV === 'production'
-const devOriginList = (process.env.ALLOWED_DEV_ORIGINS || '192.168.1.250')
+const devOriginList = (process.env.ALLOWED_DEV_ORIGINS || '192.168.1.250,10.61.175.50')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean)

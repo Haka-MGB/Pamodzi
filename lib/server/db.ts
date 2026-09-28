@@ -194,6 +194,28 @@ function resolveUnitStatus(row: DbUnit): Unit['status'] {
   return row.status === 'maintenance' ? 'maintenance' : 'vacant'
 }
 
+function calculatePropertySummary(units: Array<{ tenant_id?: string | null; rent_amount?: number | string | null }>) {
+  const totalUnits = units.length
+  const occupiedUnits = units.filter(unit => !!unit.tenant_id).length
+  const monthlyRevenue = units
+    .filter(unit => !!unit.tenant_id)
+    .reduce((sum, unit) => sum + Number(unit.rent_amount || 0), 0)
+
+  return { totalUnits, occupiedUnits, monthlyRevenue }
+}
+
+function normalizePropertySummary(propertyId: string, property: Property, units: Array<{ property_id: string; tenant_id?: string | null; rent_amount?: number | string | null }>) {
+  if (property.id !== propertyId) return property
+  const propertyUnits = units.filter(unit => unit.property_id === propertyId)
+  const summary = calculatePropertySummary(propertyUnits)
+  return {
+    ...property,
+    totalUnits: summary.totalUnits,
+    occupiedUnits: summary.occupiedUnits,
+    monthlyRevenue: summary.monthlyRevenue,
+  }
+}
+
 function unitFromDb(row: DbUnit, tenantInfo?: { name?: string; email?: string; phone?: string }): Unit {
   return {
     id: row.id,
@@ -238,11 +260,8 @@ async function recalculatePropertySummary(userId: string, propertyId: string) {
   }
 
   const propertyUnits = units || []
-  const totalUnits = propertyUnits.length
-  const occupiedUnits = propertyUnits.filter(unit => unit.tenant_id).length
-  const monthlyRevenue = propertyUnits
-    .filter(unit => unit.tenant_id)
-    .reduce((sum, unit) => sum + Number(unit.rent_amount || 0), 0)
+  const summary = calculatePropertySummary(propertyUnits)
+  const { totalUnits, occupiedUnits, monthlyRevenue } = summary
 
   const { error } = await supabase
     .from('properties')
@@ -260,10 +279,31 @@ async function recalculatePropertySummary(userId: string, propertyId: string) {
     return null
   }
 
-  return { totalUnits, occupiedUnits, monthlyRevenue }
+  return summary
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────
+
+const mutationLocks = new Map<string, Promise<void>>()
+
+async function withSerializedMutation<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const previous = mutationLocks.get(key) ?? Promise.resolve()
+  let release!: () => void
+  const current = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  mutationLocks.set(key, current)
+
+  try {
+    await previous
+    return await work()
+  } finally {
+    release()
+    if (mutationLocks.get(key) === current) {
+      mutationLocks.delete(key)
+    }
+  }
+}
 
 let isInitialized = false
 
@@ -407,10 +447,17 @@ export async function getAppData(userId: string) {
     supabase.from('revenue_data').select('*').eq('owner_id', userId),
   ])
 
+  const normalizedUnits = (units || []).map((row: any) => unitFromDb(row, row.tenants))
+  const normalizedProperties = (properties || []).map(propertyFromDb).map(property => normalizePropertySummary(property.id, property, normalizedUnits.map(unit => ({
+    property_id: unit.propertyId,
+    tenant_id: unit.tenantId,
+    rent_amount: unit.rentAmount,
+  }))))
+
   return {
     user,
-    properties: (properties || []).map(propertyFromDb),
-    units: (units || []).map((row: any) => unitFromDb(row, row.tenants)),
+    properties: normalizedProperties,
+    units: normalizedUnits,
     tenants: (tenants || []).map(tenantFromDb),
     payments: (payments || []).map(paymentFromDb),
     issues: (issues || []).map(issueFromDb),
@@ -443,73 +490,75 @@ export async function hasDuplicateProperty(userId: string, input: Pick<Property,
 
 export async function addProperty(userId: string, input: Omit<Property, 'id'>) {
   logOperation('addProperty', 'started', { userId, propertyName: input.name })
-  
+
   try {
-    const duplicate = await hasDuplicateProperty(userId, input)
-    if (duplicate) {
-      logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: 'duplicate_property' })
-      return null
-    }
+    const duplicateKey = `property:${userId}:${input.name.trim().toLowerCase()}:${input.location.trim().toLowerCase()}:${input.type.trim().toLowerCase()}`
+    return await withSerializedMutation(duplicateKey, async () => {
+      const duplicate = await hasDuplicateProperty(userId, input)
+      if (duplicate) {
+        logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: 'duplicate_property' })
+        return null
+      }
 
-    const supabase = await getSupabaseClient()
-    const now = new Date().toISOString()
-    const propertyId = id('p')
+      const supabase = await getSupabaseClient()
+      const now = new Date().toISOString()
+      const propertyId = id('p')
 
-    const propertyData: Database['public']['Tables']['properties']['Insert'] = {
-      id: propertyId,
-      owner_id: userId,
-      name: input.name,
-      location: input.location,
-      type: input.type,
-      total_units: input.totalUnits,
-      occupied_units: input.occupiedUnits,
-      monthly_revenue: input.monthlyRevenue,
-      created_at: now,
-      updated_at: now,
-    }
-
-    logDebug('Inserting property', { userId, propertyData })
-
-    // Try alternative insert method with explicit field list
-    const { data, error } = await supabase
-      .from('properties')
-      .insert([{
+      const propertyData: Database['public']['Tables']['properties']['Insert'] = {
         id: propertyId,
         owner_id: userId,
         name: input.name,
         location: input.location,
         type: input.type,
         total_units: input.totalUnits,
-        occupied_units: input.occupiedUnits,
-        monthly_revenue: input.monthlyRevenue,
+        occupied_units: 0,
+        monthly_revenue: 0,
         created_at: now,
         updated_at: now,
-      }])
-      .select()
-      .single()
+      }
 
-    if (error) {
-      logError(error, { 
-        operation: 'addProperty', 
-        userId, 
-        input,
-        errorCode: error.code,
-        errorMessage: error.message,
-        errorDetails: error.details,
-        errorHint: error.hint 
-      })
-      logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: error.message })
-      return null
-    }
+      logDebug('Inserting property', { userId, propertyData })
 
-    if (!data) {
-      logError(new Error('No data returned from insert'), { operation: 'addProperty', userId, input })
-      logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: 'no_data_returned' })
-      return null
-    }
-    
-    logOperation('addProperty', 'completed', { userId, propertyId, propertyName: input.name })
-    return propertyFromDb(data)
+      const { data, error } = await supabase
+        .from('properties')
+        .insert([{
+          id: propertyId,
+          owner_id: userId,
+          name: input.name,
+          location: input.location,
+          type: input.type,
+          total_units: input.totalUnits,
+          occupied_units: 0,
+          monthly_revenue: 0,
+          created_at: now,
+          updated_at: now,
+        }])
+        .select()
+        .single()
+
+      if (error) {
+        logError(error, {
+          operation: 'addProperty',
+          userId,
+          input,
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorDetails: error.details,
+          errorHint: error.hint
+        })
+        logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: error.message })
+        return null
+      }
+
+      if (!data) {
+        logError(new Error('No data returned from insert'), { operation: 'addProperty', userId, input })
+        logOperation('addProperty', 'failed', { userId, propertyName: input.name, reason: 'no_data_returned' })
+        return null
+      }
+
+      logOperation('addProperty', 'completed', { userId, propertyId, propertyName: input.name })
+      return propertyFromDb(data)
+    })
   } catch (err) {
     logError(err, { operation: 'addProperty', userId, input })
     logOperation('addProperty', 'failed', { userId, propertyName: input.name })
@@ -525,18 +574,71 @@ function normalizeNrc(value: string | undefined) {
   return value ? value.trim().toUpperCase() : ''
 }
 
-async function findTenantConflict(userId: string, input: { email?: string; phone?: string; nrc?: string; ignoreId?: string }) {
-  // Rare exceptions are allowed: one tenant may rent more than one unit, and a unit may
-  // host multiple tenants. The original strict uniqueness guard created false conflicts
-  // for legitimate multi-unit leases, so we intentionally disable this in-app check.
+export async function findTenantConflict(userId: string, input: { email?: string; phone?: string; nrc?: string; ignoreId?: string }) {
+  const supabase = await getSupabaseClient()
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('id, email, phone, nrc')
+    .eq('owner_id', userId)
+
+  if (error || !data) return null
+
+  const normalizedEmail = input.email?.trim().toLowerCase()
+  const normalizedPhone = input.phone?.trim()
+  const normalizedNrc = input.nrc?.trim().toUpperCase()
+
+  if (normalizedEmail) {
+    const found = data.find(row => row.id !== input.ignoreId && row.email && row.email.trim().toLowerCase() === normalizedEmail)
+    if (found) return 'email'
+  }
+
+  if (normalizedPhone) {
+    const found = data.find(row => row.id !== input.ignoreId && row.phone && row.phone.trim() === normalizedPhone)
+    if (found) return 'phone'
+  }
+
+  if (normalizedNrc) {
+    const found = data.find(row => row.id !== input.ignoreId && row.nrc && row.nrc.trim().toUpperCase() === normalizedNrc)
+    if (found) return 'nrc'
+  }
+
   return null
 }
 
-export async function addTenant(userId: string, input: Omit<Tenant, 'id'>) {
-  logOperation('addTenant', 'started', { userId, tenantName: input.name })
-  
+export async function propertyExists(userId: string, propertyId: string): Promise<boolean> {
   try {
     const supabase = await getSupabaseClient()
+    const { data, error } = await supabase
+      .from('properties')
+      .select('id')
+      .eq('id', propertyId)
+      .eq('owner_id', userId)
+      .limit(1)
+      .single()
+    
+    return !error && !!data
+  } catch {
+    return false
+  }
+}
+export async function addTenant(userId: string, input: Omit<Tenant, 'id'>) {
+  logOperation('addTenant', 'started', { userId, tenantName: input.name })
+
+  try {
+    const supabase = await getSupabaseClient()
+    const propertyCheck = await supabase
+      .from('properties')
+      .select('id')
+      .eq('id', input.propertyId)
+      .eq('owner_id', userId)
+      .limit(1)
+      .single()
+
+    if (propertyCheck.error || !propertyCheck.data) {
+      logOperation('addTenant', 'failed', { userId, tenantName: input.name, reason: 'property_not_found' })
+      return null
+    }
+
     const now = new Date().toISOString()
     const tenantId = id('t')
 
@@ -635,6 +737,8 @@ export async function addTenant(userId: string, input: Omit<Tenant, 'id'>) {
         console.error('[WARN] Failed to update unit status:', unitError)
       }
     }
+
+    await recalculatePropertySummary(userId, input.propertyId)
     
     logOperation('addTenant', 'completed', { userId, tenantId, tenantName: input.name })
     return tenantFromDb(data)
@@ -668,6 +772,21 @@ export async function hasDuplicatePayment(userId: string, input: Pick<Payment, '
     row.period.trim().toLowerCase() === normalizedPeriod &&
     row.method.trim().toLowerCase() === normalizedMethod
   ))
+}
+
+export async function hasDuplicateUnit(userId: string, propertyId: string, unitName: string, ignoreId?: string) {
+  const supabase = await getSupabaseClient()
+
+  const { data, error } = await supabase
+    .from('units')
+    .select('id, unit_name')
+    .eq('owner_id', userId)
+    .eq('property_id', propertyId)
+
+  if (error || !data) return false
+
+  const normalizedName = unitName.trim().toLowerCase()
+  return data.some(row => row.id !== ignoreId && (row.unit_name ?? '').trim().toLowerCase() === normalizedName)
 }
 
 export async function addPayment(userId: string, input: Omit<Payment, 'id'>) {
@@ -756,8 +875,6 @@ export async function updateProperty(userId: string, propertyId: string, updates
   if (updates.location !== undefined) dbUpdates.location = updates.location
   if (updates.type !== undefined) dbUpdates.type = updates.type
   if (updates.totalUnits !== undefined) dbUpdates.total_units = updates.totalUnits
-  if (updates.occupiedUnits !== undefined) dbUpdates.occupied_units = updates.occupiedUnits
-  if (updates.monthlyRevenue !== undefined) dbUpdates.monthly_revenue = updates.monthlyRevenue
 
   const { data, error } = await supabase
     .from('properties')
@@ -771,6 +888,17 @@ export async function updateProperty(userId: string, propertyId: string, updates
     console.error('Error updating property:', error)
     return null
   }
+
+  const summary = await recalculatePropertySummary(userId, propertyId)
+  if (summary) {
+    return {
+      ...propertyFromDb(data),
+      totalUnits: summary.totalUnits,
+      occupiedUnits: summary.occupiedUnits,
+      monthlyRevenue: summary.monthlyRevenue,
+    }
+  }
+
   return propertyFromDb(data)
 }
 
@@ -935,6 +1063,21 @@ export async function updateTenant(userId: string, tenantId: string, updates: Pa
   const supabase = await getSupabaseClient()
   const now = new Date().toISOString()
 
+  const previousTenant = await supabase
+    .from('tenants')
+    .select('property_id, unit')
+    .eq('id', tenantId)
+    .eq('owner_id', userId)
+    .single()
+
+  if (previousTenant.error || !previousTenant.data) {
+    console.error('Error loading tenant before update:', previousTenant.error)
+    return null
+  }
+
+  const previousPropertyId = previousTenant.data.property_id
+  const previousUnitName = previousTenant.data.unit
+
   const candidateEmail = updates.email ?? undefined
   const candidatePhone = updates.phone ?? undefined
   const candidateNrc = updates.nrc ?? undefined
@@ -977,6 +1120,41 @@ export async function updateTenant(userId: string, tenantId: string, updates: Pa
     console.error('Error updating tenant:', error)
     return null
   }
+
+  const nextPropertyId = updates.propertyId ?? previousPropertyId
+  const nextUnitName = updates.unit ?? previousUnitName
+
+  if (previousPropertyId && previousUnitName) {
+    const { error: resetError } = await supabase
+      .from('units')
+      .update({ status: 'vacant', tenant_id: null, updated_at: now })
+      .eq('owner_id', userId)
+      .eq('property_id', previousPropertyId)
+      .eq('unit_name', previousUnitName)
+
+    if (resetError) {
+      console.error('[WARN] Failed to clear previous unit occupancy:', resetError)
+    }
+  }
+
+  if (nextPropertyId && nextUnitName) {
+    const { error: assignError } = await supabase
+      .from('units')
+      .update({ status: 'occupied', tenant_id: tenantId, updated_at: now })
+      .eq('owner_id', userId)
+      .eq('property_id', nextPropertyId)
+      .eq('unit_name', nextUnitName)
+
+    if (assignError) {
+      console.error('[WARN] Failed to assign tenant to new unit:', assignError)
+    }
+  }
+
+  await recalculatePropertySummary(userId, previousPropertyId)
+  if (nextPropertyId !== previousPropertyId) {
+    await recalculatePropertySummary(userId, nextPropertyId)
+  }
+
   return tenantFromDb(data)
 }
 
@@ -1033,6 +1211,8 @@ export async function deleteTenant(userId: string, tenantId: string) {
           console.error('[WARN] Failed to reset unit status:', unitError)
         }
       }
+
+      await recalculatePropertySummary(userId, tenantData.property_id)
     }
     
     logOperation('deleteTenant', 'completed', { userId, tenantId })
@@ -1142,50 +1322,72 @@ export async function addUnit(userId: string, input: Omit<Unit, 'id' | 'tenantNa
   logOperation('addUnit', 'started', { userId, unitName: input.unitName })
 
   try {
-    const derivedStatus = input.tenantId ? 'occupied' : input.status === 'maintenance' ? 'maintenance' : 'vacant'
-    if (derivedStatus === 'occupied' && !input.tenantId) {
-      throw new Error('Occupied units must have a tenant assigned.')
-    }
+    const lockKey = `unit:${userId}:${input.propertyId}:${input.unitName.trim().toLowerCase()}`
+    return await withSerializedMutation(lockKey, async () => {
+      const propertyCheck = await (await getSupabaseClient())
+        .from('properties')
+        .select('id')
+        .eq('id', input.propertyId)
+        .eq('owner_id', userId)
+        .limit(1)
+        .single()
 
-    const supabase = await getSupabaseClient()
-    const now = new Date().toISOString()
-    const unitId = id('unit')
+      if (propertyCheck.error || !propertyCheck.data) {
+        logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: 'property_not_found' })
+        return null
+      }
 
-    const unitData: Database['public']['Tables']['units']['Insert'] = {
-      id: unitId,
-      owner_id: userId,
-      property_id: input.propertyId,
-      unit_name: input.unitName,
-      unit_number: input.unitNumber || null,
-      rent_amount: input.rentAmount,
-      status: derivedStatus,
-      tenant_id: input.tenantId || null,
-      notes: input.notes || null,
-      created_at: now,
-      updated_at: now,
-    }
+      const duplicate = await hasDuplicateUnit(userId, input.propertyId, input.unitName)
+      if (duplicate) {
+        logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: 'duplicate_unit_name' })
+        return null
+      }
 
-    const { data, error } = await supabase
-      .from('units')
-      .insert([unitData])
-      .select()
-      .single()
+      const derivedStatus = input.tenantId ? 'occupied' : input.status === 'maintenance' ? 'maintenance' : 'vacant'
+      if (derivedStatus === 'occupied' && !input.tenantId) {
+        throw new Error('Occupied units must have a tenant assigned.')
+      }
 
-    if (error) {
-      logError(error, { operation: 'addUnit', userId, input })
-      logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: error.message })
-      return null
-    }
+      const supabase = await getSupabaseClient()
+      const now = new Date().toISOString()
+      const unitId = id('unit')
 
-    if (!data) {
-      logError(new Error('No data returned from insert'), { operation: 'addUnit', userId, input })
-      logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: 'no_data_returned' })
-      return null
-    }
+      const unitData: Database['public']['Tables']['units']['Insert'] = {
+        id: unitId,
+        owner_id: userId,
+        property_id: input.propertyId,
+        unit_name: input.unitName,
+        unit_number: input.unitNumber || null,
+        rent_amount: input.rentAmount,
+        status: derivedStatus,
+        tenant_id: input.tenantId || null,
+        notes: input.notes || null,
+        created_at: now,
+        updated_at: now,
+      }
 
-    await recalculatePropertySummary(userId, input.propertyId)
-    logOperation('addUnit', 'completed', { userId, unitId, unitName: input.unitName })
-    return unitFromDb(data)
+      const { data, error } = await supabase
+        .from('units')
+        .insert([unitData])
+        .select()
+        .single()
+
+      if (error) {
+        logError(error, { operation: 'addUnit', userId, input })
+        logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: error.message })
+        return null
+      }
+
+      if (!data) {
+        logError(new Error('No data returned from insert'), { operation: 'addUnit', userId, input })
+        logOperation('addUnit', 'failed', { userId, unitName: input.unitName, reason: 'no_data_returned' })
+        return null
+      }
+
+      await recalculatePropertySummary(userId, input.propertyId)
+      logOperation('addUnit', 'completed', { userId, unitId, unitName: input.unitName })
+      return unitFromDb(data)
+    })
   } catch (err) {
     logError(err, { operation: 'addUnit', userId, input })
     logOperation('addUnit', 'failed', { userId, unitName: input.unitName })
@@ -1209,6 +1411,14 @@ export async function updateUnit(userId: string, unitId: string, updates: Partia
       logError(existingResult.error, { operation: 'updateUnit', userId, unitId, updates })
       logOperation('updateUnit', 'failed', { userId, unitId, reason: 'unit_not_found' })
       return null
+    }
+
+    if (updates.unitName !== undefined) {
+      const duplicate = await hasDuplicateUnit(userId, existingResult.data.property_id, updates.unitName, unitId)
+      if (duplicate) {
+        logOperation('updateUnit', 'failed', { userId, unitId, reason: 'duplicate_unit_name' })
+        return null
+      }
     }
 
     const nextTenantId = updates.tenantId !== undefined ? updates.tenantId ?? null : existingResult.data.tenant_id ?? null
@@ -1269,6 +1479,14 @@ export async function deleteUnit(userId: string, unitId: string) {
       logError(error, { operation: 'deleteUnit', userId, unitId })
       logOperation('deleteUnit', 'failed', { userId, unitId })
       return null
+    }
+
+    if (data.tenant_id) {
+      await supabase
+        .from('tenants')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('owner_id', userId)
+        .eq('id', data.tenant_id)
     }
 
     await recalculatePropertySummary(userId, data.property_id)

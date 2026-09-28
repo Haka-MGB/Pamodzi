@@ -62,11 +62,10 @@ export function parseProperty(value: Partial<Property> | null) {
     location: cleanText(value.location),
     type: cleanText(value.type, 60) || 'Residential',
     totalUnits: cleanNumber(value.totalUnits),
-    occupiedUnits: cleanNumber(value.occupiedUnits),
-    monthlyRevenue: cleanNumber(value.monthlyRevenue),
+    occupiedUnits: 0,
+    monthlyRevenue: 0,
   }
   if (!property.name || !property.location || property.totalUnits < 1) return null
-  if (property.occupiedUnits < 0 || property.occupiedUnits > property.totalUnits) return null
   return property
 }
 
@@ -77,11 +76,8 @@ export function parsePropertyUpdates(value: Record<string, unknown> | null) {
   if (value.location !== undefined) updates.location = cleanText(value.location)
   if (value.type !== undefined) updates.type = cleanText(value.type, 60)
   if (value.totalUnits !== undefined) updates.totalUnits = cleanNumber(value.totalUnits)
-  if (value.occupiedUnits !== undefined) updates.occupiedUnits = cleanNumber(value.occupiedUnits)
-  if (value.monthlyRevenue !== undefined) updates.monthlyRevenue = cleanNumber(value.monthlyRevenue)
 
   if (updates.totalUnits !== undefined && updates.totalUnits < 1) return null
-  if (updates.occupiedUnits !== undefined && updates.totalUnits !== undefined && updates.occupiedUnits > updates.totalUnits) return null
   return updates
 }
 
@@ -225,7 +221,7 @@ export function parseIssueUpdates(value: Record<string, unknown> | null) {
 
 function cleanNumber(value: unknown) {
   const number = Number(value)
-  return Number.isFinite(number) ? Math.max(0, number) : 0
+  return Number.isFinite(number) ? number : 0
 }
 
 function normalizeEnum<T extends readonly string[]>(value: unknown, allowed: T, fallback: T[number]) {

@@ -315,12 +315,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addTenant = useCallback(async (t: Omit<Tenant, 'id'>) => {
     const tenant = requireApiItem(await apiPost<Tenant>('/api/tenants', t), isTenant, 'Unable to save tenant.')
     setTenants(prev => [tenant, ...prev])
-  }, [])
+    await refreshData()
+  }, [refreshData])
 
   const updateTenant = useCallback(async (id: string, updates: Partial<Tenant>) => {
     const tenant = requireApiItem(await apiPatch<Tenant>(`/api/tenants/${id}`, updates), isTenant, 'Unable to update tenant.')
     setTenants(prev => prev.map(t => t.id === id ? tenant : t))
-  }, [])
+    await refreshData()
+  }, [refreshData])
 
   const updateProperty = useCallback(async (id: string, updates: Partial<Property>) => {
     const property = requireApiItem(await apiPatch<Property>(`/api/properties/${id}`, updates), isProperty, 'Unable to update property.')
@@ -335,7 +337,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteTenant = useCallback(async (id: string, password?: string) => {
     await apiDelete(`/api/tenants/${id}`, password ? { password } : undefined)
     setTenants(prev => prev.filter(t => t.id !== id))
-  }, [])
+    await refreshData()
+  }, [refreshData])
 
   const deletePayment = useCallback(async (id: string, password?: string) => {
     await apiDelete(`/api/payments/${id}`, password ? { password } : undefined)
@@ -365,9 +368,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const recomputePropertySummaries = useCallback((nextUnits: Unit[]) => {
     setProperties(prev => prev.map(property => {
       const propertyUnits = nextUnits.filter(unit => unit.propertyId === property.id)
-      const occupiedUnits = propertyUnits.filter(unit => unit.status === 'occupied').length
+      const occupiedUnits = propertyUnits.filter(unit => !!unit.tenantId).length
       const monthlyRevenue = propertyUnits
-        .filter(unit => unit.status === 'occupied')
+        .filter(unit => !!unit.tenantId)
         .reduce((sum, unit) => sum + unit.rentAmount, 0)
 
       return {

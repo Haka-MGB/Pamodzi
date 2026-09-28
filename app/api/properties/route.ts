@@ -16,6 +16,10 @@ export async function POST(request: NextRequest) {
   if (duplicate) return fail('Duplicate property detected. Same name, location, and type already exists.', 409)
 
   const property = await addProperty(userId, input)
-  if (!property) return fail('Unable to save property.', 500)
+  if (!property) {
+    const stillDuplicate = await hasDuplicateProperty(userId, input)
+    if (stillDuplicate) return fail('Duplicate property detected. Same name, location, and type already exists.', 409)
+    return fail('Unable to save property.', 500)
+  }
   return ok(property, { status: 201 })
 }

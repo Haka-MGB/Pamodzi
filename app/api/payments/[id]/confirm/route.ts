@@ -8,6 +8,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!userId) return fail('Authentication required.', 401)
 
   const id = (await params).id
+  if (!id || id === 'confirm') return fail('Payment ID is required.', 400)
+
   const payment = await confirmPayment(userId, id)
   if (!payment) return fail('Payment not found.', 404)
   return ok(payment)

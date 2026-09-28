@@ -20,6 +20,7 @@ build/
 .kiro/
 .docs/
 .output.txt
+scripts/deep-system-check.mjs.mjs
 
 # Build artifacts
 tsconfig.tsbuildinfo

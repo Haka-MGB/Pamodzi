@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server'
-import { addUnit, getUnitsByProperty } from '@/lib/server/db'
+import { addUnit, getUnitsByProperty, hasDuplicateUnit } from '@/lib/server/db'
 import { fail, ok, readJson, requireSameOrigin, requireUserId } from '@/lib/server/http'
 import { parseUnit } from '@/lib/server/validation'
 
@@ -25,8 +25,15 @@ export async function POST(request: NextRequest) {
   const input = parseUnit(await readJson<Record<string, unknown>>(request))
   if (!input) return fail('Check the unit details.')
 
+  const duplicate = await hasDuplicateUnit(userId, input.propertyId, input.unitName)
+  if (duplicate) return fail('Duplicate unit name detected in this property.', 409)
+
   const unit = await addUnit(userId, input)
 
-  if (!unit) return fail('Unable to create unit.', 500)
+  if (!unit) {
+    const stillDuplicate = await hasDuplicateUnit(userId, input.propertyId, input.unitName)
+    if (stillDuplicate) return fail('Duplicate unit name detected in this property.', 409)
+    return fail('Unable to create unit.', 500)
+  }
   return ok(unit, { status: 201 })
 }

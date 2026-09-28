@@ -50,7 +50,8 @@ export function revokeSessionToken(token: string | undefined) {
   const expiresAt = Date.now() + SESSION_TTL_SECONDS * 1000
   revokedTokens.set(token, expiresAt)
   const session = readSessionTokenIgnoringRevocation(token)
-  if (session) revokedUsers.set(session.userId, expiresAt)
+  //commented for testing
+  //if (session) revokedUsers.set(session.userId, expiresAt)
 }
 
 function readSessionTokenIgnoringRevocation(token: string) {
